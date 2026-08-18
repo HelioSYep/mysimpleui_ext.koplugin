@@ -184,7 +184,7 @@ end
 
 function MySimpleUIExt:addToMainMenu(menu_items)
     menu_items[PLUGIN_ID] = {
-        text = "我的 SimpleUI 增强",
+        text = "Simple UI 增强",
         sorting_hint = "tools",
         sub_item_table = {
             {
@@ -196,7 +196,7 @@ function MySimpleUIExt:addToMainMenu(menu_items)
                 keep_menu_open = true,
                 callback = function()
                     UIManager:show(InfoMessage:new{
-                        text = "我的 SimpleUI 增强 v0.1.0\n\n"
+                        text = "Simple UI 增强 v0.1.0\n\n"
                             .. "用于集中管理提升 SimpleUI 易用性的个人补丁。",
                     })
                 end,
