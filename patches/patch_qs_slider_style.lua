@@ -1,4 +1,5 @@
--- Selectable slider style for the SimpleUI Quick Settings panel.
+-- Shared slider style for the SimpleUI Quick Settings panel and KOReader's
+-- native frontlight dialog.
 
 local BD         = require("ui/bidi")
 local Blitbuffer = require("ffi/blitbuffer")
@@ -11,8 +12,8 @@ local Screen = Device.screen
 
 local P = {
     id              = "qs_slider_style",
-    name            = "快捷设置栏：滑块样式",
-    description     = "为 SimpleUI 快捷设置栏添加“原版 / 细线 / 圆形”滑块样式选择；自动兼容仅亮度和亮度＋色温设备。",
+    name            = "前光灯：滑块样式",
+    description     = "为 SimpleUI 快捷设置栏添加“原版 / 细线 / 圆形”滑块样式选择，并同步到 KOReader 原生前光灯窗口；自动兼容仅亮度和亮度＋色温设备。",
     default_enabled = true,
 }
 
@@ -149,6 +150,18 @@ local function applyCustomBrightnessStyle(progress)
     end
 end
 
+local function getButtonProgressSize(progress)
+    local frame = progress and progress.buttonprogress_frame
+    if frame and type(frame.getSize) == "function" then
+        local size = frame:getSize()
+        if size and size.w and size.h then return size end
+    end
+    return {
+        w = progress and (progress.width or (progress.dimen and progress.dimen.w)) or 0,
+        h = progress and (progress.height or (progress.dimen and progress.dimen.h)) or 0,
+    }
+end
+
 local function applyCustomWarmthStyle(progress)
     if not progress or progress._mysui_custom_slider then return end
     local original_paintTo = progress.paintTo
@@ -158,8 +171,12 @@ local function applyCustomWarmthStyle(progress)
     progress.paintTo = function(self, bb, x, y)
         -- Preserve child layout and hit boxes, then cover the segmented visual.
         original_paintTo(self, bb, x, y)
-        local width = self.dimen and self.dimen.w or self.width or 0
-        local height = self.dimen and self.dimen.h or self.height or 0
+        local size = getButtonProgressSize(self)
+        local width = size.w
+        local height = size.h
+        if self.dimen then
+            self.dimen.w, self.dimen.h = width, height
+        end
         local button_count = tonumber(self.num_buttons) or 0
         local position = tonumber(self.position) or 0
         local percentage = button_count > 0 and position / button_count or 0
@@ -368,6 +385,14 @@ local function patchPanelBuilder()
                         if type(widget.update) == "function" then
                             widget:update()
                         end
+                        -- ButtonProgressWidget:update() rebuilds its children,
+                        -- but does not refresh the outer geometry created by
+                        -- init(). Keep paint bounds and hit testing aligned
+                        -- with the expanded circular slider.
+                        if widget.dimen then
+                            local size = getButtonProgressSize(widget)
+                            widget.dimen.w, widget.dimen.h = size.w, size.h
+                        end
                     end
                     warmth_widgets[#warmth_widgets + 1] = widget
                 end
@@ -401,6 +426,63 @@ local function patchPanelBuilder()
     return true
 end
 
+local function patchNativeFrontlight()
+    local FrontLightWidget = require("ui/widget/frontlightwidget")
+    if FrontLightWidget._mysui_slider_style_patched then return true end
+
+    local original_layout = FrontLightWidget.layout
+    if type(original_layout) ~= "function" then
+        error("FrontLightWidget.layout is unavailable")
+    end
+
+    FrontLightWidget._mysui_slider_style_patched = true
+    FrontLightWidget.layout = function(self, ...)
+        local results = { pcall(original_layout, self, ...) }
+        if not results[1] then error(results[2]) end
+
+        local style = getStyle()
+        -- Keep KOReader's native button rows and actions intact. Only the two
+        -- slider instances share SimpleUI's selected track/thumb style.
+        if style ~= STYLE_ORIGINAL then
+            applyCustomBrightnessStyle(self.fl_progress)
+            applyCustomWarmthStyle(self.nl_progress)
+        end
+
+        if style == STYLE_CIRCLE then
+            local function hideMax(control_row, marker_name)
+                local max_button = control_row and control_row[#control_row]
+                if not max_button then return end
+
+                max_button.callback = nil
+                max_button.enabled = false
+                max_button.hidden = true
+                max_button.no_focus = true
+                max_button.focusable = false
+                max_button.ges_events = {}
+                if max_button.label_widget then
+                    max_button.label_widget.hide = true
+                end
+                max_button.paintTo = function() end
+                self[marker_name] = max_button
+                table.remove(control_row, #control_row)
+            end
+
+            -- Brightness Max is the last control in focus row 2. Warmth Max
+            -- is the last control in row 5 (Configure, when present, is
+            -- inserted before it). Hide both so the paired sliders follow the
+            -- same circular-style removal rule as the SimpleUI panel.
+            hideMax(self.layout and self.layout[2], "_mysui_hidden_brightness_max")
+            if self.has_nl then
+                hideMax(self.layout and self.layout[5], "_mysui_hidden_warmth_max")
+            end
+        end
+
+        table.remove(results, 1)
+        return unpack(results)
+    end
+    return true
+end
+
 local applied = false
 
 function P.apply()
@@ -416,6 +498,7 @@ function P.apply()
 
     patchSettingsMenu(QSBar)
     local panel_ok, reason = patchPanelBuilder()
+    patchNativeFrontlight()
     applied = true
     if not panel_ok then
         -- The style menu is already installed. If the Quick Settings Bar is
