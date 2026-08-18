@@ -25,6 +25,8 @@ local THUMB_WIDTH    = Screen:scaleBySize(3)
 local THUMB_HEIGHT   = Screen:scaleBySize(14)
 local CIRCLE_DIAMETER = Screen:scaleBySize(22)
 local CIRCLE_BORDER   = math.max(1, Screen:scaleBySize(1))
+local SMALL_BUTTON_WIDTH = Screen:scaleBySize(40)
+local MAX_BUTTON_WIDTH   = Screen:scaleBySize(50)
 
 local SUISettings
 
@@ -254,12 +256,59 @@ local function patchPanelBuilder()
     TouchMenu._mysui_slider_style_patched = true
 
     TouchMenu.updateItems = function(self, ...)
-        local custom_panel = getStyle() ~= STYLE_ORIGINAL
+        local style = getStyle()
+        local custom_panel = style ~= STYLE_ORIGINAL
             and self.item_table
             and self.item_table._sui_qs_panel
         local warmth_widgets = {}
+        local removed_max_buttons = {}
         local ButtonProgressWidget
         local original_bpw_init
+        local Button
+        local original_button_init
+
+        -- The circular reference style uses plain −/+ glyphs and has no Max
+        -- action. Intercept only the Buttons synchronously created while this
+        -- panel is being built; restore the class immediately afterwards.
+        if custom_panel and style == STYLE_CIRCLE then
+            local ok_button, ButtonClass = pcall(require, "ui/widget/button")
+            if ok_button and ButtonClass and type(ButtonClass.init) == "function" then
+                Button = ButtonClass
+                original_button_init = ButtonClass.init
+                ButtonClass.init = function(widget, ...)
+                    local text = widget.text
+                    local width = widget.width
+                    local is_step_button = width == SMALL_BUTTON_WIDTH
+                        and (text == "−" or text == "＋" or text == "-" or text == "+")
+                    local is_max_button = width == MAX_BUTTON_WIDTH
+                        and type(text) == "string"
+                        and text ~= ""
+                        and not is_step_button
+
+                    if is_step_button then
+                        widget.bordersize = 0
+                    end
+                    original_button_init(widget, ...)
+
+                    if is_step_button and widget.frame then
+                        widget.frame.bordersize = 0
+                        widget.frame.color = Blitbuffer.COLOR_WHITE
+                    elseif is_max_button then
+                        local original_size = widget:getSize()
+                        widget._mysui_removed_width = original_size.w or width or 0
+                        widget.callback = nil
+                        widget.enabled = false
+                        widget.ges_events = {}
+                        widget.dimen.w = 0
+                        widget.getSize = function()
+                            return { w = 0, h = original_size.h or 0 }
+                        end
+                        widget.paintTo = function() end
+                        removed_max_buttons[#removed_max_buttons + 1] = widget
+                    end
+                end
+            end
+        end
 
         if custom_panel and Device:hasNaturalLight() then
             local ok_bpw, BPW = pcall(require, "ui/widget/buttonprogresswidget")
@@ -277,10 +326,28 @@ local function patchPanelBuilder()
         if ButtonProgressWidget and original_bpw_init then
             ButtonProgressWidget.init = original_bpw_init
         end
+        if Button and original_button_init then
+            Button.init = original_button_init
+        end
         if not results[1] then error(results[2]) end
 
         if custom_panel then
             local refs = self._sui_qs_refs
+            if style == STYLE_CIRCLE then
+                -- Reassign the removed Max button width to the actual slider,
+                -- placing the plain + glyph at the right edge like the photo.
+                if refs and refs.fl_progress and removed_max_buttons[1] then
+                    refs.fl_progress.width = refs.fl_progress.width
+                        + removed_max_buttons[1]._mysui_removed_width
+                end
+                if warmth_widgets[1] and removed_max_buttons[2] then
+                    warmth_widgets[1].width = warmth_widgets[1].width
+                        + removed_max_buttons[2]._mysui_removed_width
+                    if type(warmth_widgets[1].update) == "function" then
+                        warmth_widgets[1]:update()
+                    end
+                end
+            end
             if refs then applyCustomBrightnessStyle(refs.fl_progress) end
             for _, widget in ipairs(warmth_widgets) do
                 applyCustomWarmthStyle(widget)
