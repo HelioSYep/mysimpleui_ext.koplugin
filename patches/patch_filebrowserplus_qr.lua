@@ -360,6 +360,52 @@ local function installHoldHandler(TouchMenu)
     return true
 end
 
+local function installPluginMenuCompatibility(plugin)
+    if not plugin or plugin._mysui_filebrowser_menu_patched then return false end
+    local original_addToMainMenu = plugin.addToMainMenu
+    if type(original_addToMainMenu) ~= "function" then return false end
+
+    plugin._mysui_filebrowser_menu_patched = true
+    plugin.addToMainMenu = function(self, menu_items)
+        local results = { original_addToMainMenu(self, menu_items) }
+        local item = menu_items and menu_items[PLUGIN_ID]
+        if item and type(item.callback) == "function" then
+            local original_callback = item.callback
+            item.callback = function(touchmenu_instance)
+                -- FileBrowserPlus 1.2.0 unconditionally calls
+                -- touchmenu_instance:updateItems(). SimpleUI's plugin quick
+                -- action invokes this callback without a TouchMenu instance.
+                if touchmenu_instance == nil then
+                    return toggleFilebrowser()
+                end
+                return original_callback(touchmenu_instance)
+            end
+        end
+        if item and type(item.hold_callback) == "function" then
+            local original_hold_callback = item.hold_callback
+            item.hold_callback = function(touchmenu_instance)
+                if touchmenu_instance == nil then
+                    return showQRCodeFromHold()
+                end
+                return original_hold_callback(touchmenu_instance)
+            end
+        end
+        return unpack(results)
+    end
+    logger.info("mysimpleui_ext/filebrowserplus_qr: patched FileBrowserPlus 1.2 menu callbacks")
+    return true
+end
+
+local function installPluginMenuCompatibilityWhenReady(attempts_left)
+    local plugin = resolveFilebrowser()
+    if installPluginMenuCompatibility(plugin) then return end
+    if attempts_left > 0 then
+        UIManager:scheduleIn(0.2, function()
+            installPluginMenuCompatibilityWhenReady(attempts_left - 1)
+        end)
+    end
+end
+
 local function migrateLegacySlot()
     if not SUISettings then return end
     local slots = SUISettings:readSetting(SLOTS_KEY)
@@ -409,6 +455,7 @@ function P.apply()
 
     SUISettings = package.loaded["infra/sui_store"] or require("infra/sui_store")
     migrateLegacySlot()
+    installPluginMenuCompatibilityWhenReady(25)
     local ok_tm, TouchMenu = pcall(require, "ui/widget/touchmenu")
     if ok_tm and TouchMenu then
         local ok_hold, reason = installHoldHandler(TouchMenu)
