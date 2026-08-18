@@ -1,6 +1,6 @@
-# Simple UI 增强插件
+# 插件增强
 
-这是一个用于集中管理个人 SimpleUI 易用性改进的 KOReader 插件，结构参考
+这是一个用于按目标插件集中管理个人增强补丁的 KOReader 插件，结构参考
 `simpleui_ext.koplugin`，但去掉了与当前目标无关的统计模块和补丁。
 
 ## 当前包含的补丁
@@ -24,7 +24,7 @@
 补丁开关位于：
 
 ```text
-工具 → Simple UI 增强 → 增强功能 → 前光灯：滑块样式
+工具 → 插件增强 → SimpleUI → 前光灯：滑块样式
 ```
 
 启用补丁后，具体样式选择位于：
@@ -44,7 +44,7 @@ SimpleUI → 快捷设置栏 → 滑块样式
 补丁开关位于：
 
 ```text
-工具 → Simple UI 增强 → 增强功能 → FileBrowserPlus：二维码增强
+工具 → 插件增强 → FileBrowserPlus → 二维码增强
 ```
 
 ## 安装
@@ -74,7 +74,7 @@ koreader/
 插件入口位于：
 
 ```text
-工具 → Simple UI 增强
+工具 → 插件增强
 ```
 
 ## 插件内部开发约定
@@ -95,6 +95,8 @@ patch_<id>.lua
 return {
     id = "<id>",
     name = "菜单名称",
+    plugin_name = "目标插件名称",
+    plugin_order = 100,
     description = "功能说明",
     default_enabled = false,
     apply = function()
