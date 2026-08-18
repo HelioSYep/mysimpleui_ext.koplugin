@@ -29,6 +29,20 @@
 SimpleUI → 快捷设置栏 → 滑块样式
 ```
 
+### `patch_filebrowserplus_qr.lua`：FileBrowserPlus 二维码增强
+
+- 默认状态：开启；直接补丁 FileBrowserPlus 1.2.x，不依赖 SimpleUI 快捷操作。
+- 保留 FileBrowserPlus 1.2.x 原层级：短按顶层项目启动/停止服务器，长按进入设置。
+- 在长按设置页中保留原版端口、路径、密码、自动启动和自动停止等项目，并增加“显示二维码”和“启动时自动显示二维码”。
+- 默认在服务器启动后显示二维码；关闭二维码不会停止服务器。
+- 停止服务器时自动关闭二维码。
+
+补丁开关位于：
+
+```text
+工具 → Simple UI 增强 → 增强功能 → FileBrowserPlus：二维码增强
+```
+
 ## 安装
 
 这是一个完整的 KOReader 插件，不是 KOReader 用户补丁。请勿放入
@@ -49,6 +63,7 @@ koreader/
         ├── LICENSE
         ├── README.md
         └── patches/
+            ├── patch_filebrowserplus_qr.lua
             └── patch_qs_slider_style.lua
 ```
 
