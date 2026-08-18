@@ -32,7 +32,7 @@ SimpleUI → 快捷设置栏 → 滑块样式
 ### `patch_filebrowserplus_qr.lua`：FileBrowserPlus 文件管理快捷操作
 
 - 默认状态：开启；需要已安装并启用 [FileBrowserPlus](https://github.com/patelneeraj/filebrowserplus.koplugin)。
-- 在 `SimpleUI → 快捷设置栏 → 快捷操作` 中增加“文件管理 / FileBrowserPlus”。
+- 在 `SimpleUI → 快捷设置栏 → 快捷操作` 中增加“文件管理 / FileBrowserPlus（二维码快捷开关）”；使用独立快捷操作 ID，避免与 FileBrowserPlus 1.2.0 自带菜单操作冲突。
 - 单击快捷操作可以切换 FileBrowserPlus：未运行时启动并居中显示二维码，运行中再次单击会停止服务；二维码下方同时显示 `IP:port`。
 - 关闭二维码只关闭弹窗，不会停止文件管理服务；长按快捷操作会再次显示正在运行的服务二维码。
 - KOReader 不支持二维码组件时，会提示使用 `IP:port` 连接。

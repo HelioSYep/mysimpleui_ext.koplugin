@@ -8,7 +8,9 @@ local GestureRange = require("ui/gesturerange")
 local UIManager = require("ui/uimanager")
 local logger = require("logger")
 
-local ACTION_ID = "filebrowserplus"
+local PLUGIN_ID = "filebrowserplus"
+local LEGACY_ACTION_ID = "filebrowserplus"
+local ACTION_ID = "mysui_filebrowserplus_qr"
 local SLOTS_KEY = "simpleui_qs_bar_slots"
 
 local P = {
@@ -19,14 +21,6 @@ local P = {
 }
 
 local SUISettings
--- Some FileBrowserPlus releases expect start()/stop() to receive the
--- TouchMenu instance used by their own menu callback and call updateItems()
--- on it. A SimpleUI quick action has no such instance, so provide the small
--- compatible surface those releases need. Older releases ignore the extra
--- argument.
-local TOUCHMENU_PROXY = {
-    updateItems = function() end,
-}
 
 local function unavailable(message)
     local InfoMessage = require("ui/widget/infomessage")
@@ -48,7 +42,7 @@ local function resolveFilebrowser(ctx)
     -- This also works while a FileManager/ReaderUI instance is being rebuilt.
     local ok_loader, PluginLoader = pcall(require, "pluginloader")
     if ok_loader and PluginLoader and type(PluginLoader.getPluginInstance) == "function" then
-        local ok_instance, instance = pcall(PluginLoader.getPluginInstance, PluginLoader, ACTION_ID)
+        local ok_instance, instance = pcall(PluginLoader.getPluginInstance, PluginLoader, PLUGIN_ID)
         if ok_instance and instance then return instance end
     end
     return nil
@@ -239,7 +233,7 @@ local function ensureRunningAndShow(ctx)
         return
     end
 
-    local ok_start, err = pcall(plugin.start, plugin, TOUCHMENU_PROXY)
+    local ok_start, err = pcall(plugin.start, plugin)
     if not ok_start then
         logger.warn("mysimpleui_ext: FileBrowserPlus start failed", tostring(err))
         unavailable("FileBrowserPlus 启动失败。")
@@ -281,7 +275,7 @@ local function toggleFilebrowser(ctx)
 
     if running then
         closeQRCode()
-        local ok_stop, err = pcall(plugin.stop, plugin, TOUCHMENU_PROXY)
+        local ok_stop, err = pcall(plugin.stop, plugin)
         if not ok_stop then
             logger.warn("mysimpleui_ext: FileBrowserPlus stop failed", tostring(err))
             unavailable("FileBrowserPlus 停止失败。")
@@ -303,12 +297,12 @@ end
 
 local function actionLabel()
     local plugin = resolveFilebrowser()
-    if not plugin then return "文件管理 / FileBrowserPlus (不可用)" end
+    if not plugin then return "FileBrowserPlus 二维码快捷开关（不可用）" end
     local ok_running, running = pcall(plugin.isRunning, plugin)
     if ok_running and running then
-        return "文件管理 / FileBrowserPlus (运行中)"
+        return "FileBrowserPlus 二维码快捷开关（运行中）"
     end
-    return "文件管理 / FileBrowserPlus (已停止)"
+    return "FileBrowserPlus 二维码快捷开关（已停止）"
 end
 
 local function installHoldHandler(TouchMenu)
@@ -366,6 +360,35 @@ local function installHoldHandler(TouchMenu)
     return true
 end
 
+local function migrateLegacySlot()
+    if not SUISettings then return end
+    local slots = SUISettings:readSetting(SLOTS_KEY)
+    if type(slots) ~= "table" then return end
+
+    local changed = false
+    for index, action_id in ipairs(slots) do
+        if action_id == LEGACY_ACTION_ID then
+            slots[index] = ACTION_ID
+            changed = true
+        end
+    end
+    if not changed then return end
+
+    if type(SUISettings.saveSetting) ~= "function" then
+        logger.warn("mysimpleui_ext/filebrowserplus_qr: cannot migrate legacy slot")
+        return
+    end
+    local ok_save, err = pcall(SUISettings.saveSetting, SUISettings, SLOTS_KEY, slots)
+    if not ok_save then
+        logger.warn("mysimpleui_ext/filebrowserplus_qr: legacy slot migration failed", tostring(err))
+        return
+    end
+    if type(SUISettings.flush) == "function" then
+        pcall(SUISettings.flush, SUISettings)
+    end
+    logger.info("mysimpleui_ext/filebrowserplus_qr: migrated legacy quick-action slot")
+end
+
 function P.apply()
     if P._applied then return true end
 
@@ -376,7 +399,7 @@ function P.apply()
     local ok_config, Config = pcall(require, "infra/sui_config")
     QA.register{
         id          = ACTION_ID,
-        label       = "文件管理 / FileBrowserPlus",
+        label       = "文件管理 / FileBrowserPlus（二维码快捷开关）",
         get_label   = actionLabel,
         icon        = ok_config and Config.ICON and Config.ICON.plugin or nil,
         is_in_place = true,
@@ -385,6 +408,7 @@ function P.apply()
     }
 
     SUISettings = package.loaded["infra/sui_store"] or require("infra/sui_store")
+    migrateLegacySlot()
     local ok_tm, TouchMenu = pcall(require, "ui/widget/touchmenu")
     if ok_tm and TouchMenu then
         local ok_hold, reason = installHoldHandler(TouchMenu)
