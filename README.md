@@ -35,6 +35,7 @@ SimpleUI → 快捷设置栏 → 滑块样式
 - 在 `SimpleUI → 快捷设置栏 → 快捷操作` 中增加“文件管理 / FileBrowserPlus（二维码快捷开关）”；使用独立快捷操作 ID，避免与 FileBrowserPlus 1.2.0 自带菜单操作冲突。
 - 单击快捷操作可以切换 FileBrowserPlus：未运行时启动并居中显示二维码，运行中再次单击会停止服务；二维码下方同时显示 `IP:port`。
 - 关闭二维码只关闭弹窗，不会停止文件管理服务；长按快捷操作会再次显示正在运行的服务二维码。
+- 在 FileBrowserPlus 1.2.0 自身菜单中注入“FileBrowserPlus 服务器”“显示二维码”和“启动时自动显示二维码”，并保留其原有设置项；不修改 FileBrowserPlus 插件文件。
 - KOReader 不支持二维码组件时，会提示使用 `IP:port` 连接。
 
 补丁开关位于：

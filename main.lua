@@ -196,7 +196,7 @@ function MySimpleUIExt:addToMainMenu(menu_items)
                 keep_menu_open = true,
                 callback = function()
                     UIManager:show(InfoMessage:new{
-                        text = "Simple UI 增强 v0.3.5\n\n"
+                        text = "Simple UI 增强 v0.4.0\n\n"
                             .. "用于集中管理提升 SimpleUI 易用性的个人补丁。",
                     })
                 end,

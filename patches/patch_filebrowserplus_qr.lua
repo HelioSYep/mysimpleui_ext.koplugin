@@ -12,6 +12,7 @@ local PLUGIN_ID = "filebrowserplus"
 local LEGACY_ACTION_ID = "filebrowserplus"
 local ACTION_ID = "mysui_filebrowserplus_qr"
 local SLOTS_KEY = "simpleui_qs_bar_slots"
+local AUTO_SHOW_KEY = "FilebrowserPlus_auto_show_qr"
 
 local P = {
     id              = "filebrowserplus_qr",
@@ -21,6 +22,15 @@ local P = {
 }
 
 local SUISettings
+
+local function autoShowEnabled()
+    local value = G_reader_settings:readSetting(AUTO_SHOW_KEY)
+    if value == nil then
+        G_reader_settings:saveSetting(AUTO_SHOW_KEY, true)
+        return true
+    end
+    return value == true
+end
 
 local function unavailable(message)
     local InfoMessage = require("ui/widget/infomessage")
@@ -220,6 +230,19 @@ local function showQRCode(plugin)
     UIManager:show(dialog)
 end
 
+local function showWhenRunning(plugin, attempts_left, report_failure)
+    local ok_running, running = pcall(plugin.isRunning, plugin)
+    if ok_running and running then
+        showQRCode(plugin)
+    elseif attempts_left > 0 then
+        UIManager:scheduleIn(0.2, function()
+            showWhenRunning(plugin, attempts_left - 1, report_failure)
+        end)
+    elseif report_failure then
+        unavailable("FileBrowserPlus 启动后未检测到服务，请检查插件设置和日志。")
+    end
+end
+
 local function ensureRunningAndShow(ctx)
     local plugin = resolveFilebrowser(ctx)
     if not plugin then
@@ -233,31 +256,22 @@ local function ensureRunningAndShow(ctx)
         return
     end
 
+    -- The injected start() wrapper normally follows the auto-show setting.
+    -- A SimpleUI QR quick action always shows QR, so suppress that wrapper's
+    -- own scheduling and manage this invocation explicitly.
+    plugin._mysui_qr_start_managed = true
     local ok_start, err = pcall(plugin.start, plugin)
+    plugin._mysui_qr_start_managed = nil
     if not ok_start then
         logger.warn("mysimpleui_ext: FileBrowserPlus start failed", tostring(err))
         unavailable("FileBrowserPlus 启动失败。")
         return
     end
 
-    -- start() launches the process and writes its pid file synchronously, but
-    -- the short delay lets the network interface and endpoint settle first.
-    local function showWhenRunning(attempts_left)
-        local ok_after, running_after = pcall(plugin.isRunning, plugin)
-        if ok_after and running_after then
-            showQRCode(plugin)
-        elseif attempts_left > 0 then
-            UIManager:scheduleIn(0.2, function()
-                showWhenRunning(attempts_left - 1)
-            end)
-        else
-            unavailable("FileBrowserPlus 启动后未检测到服务，请检查插件设置和日志。")
-        end
-    end
     -- Slower devices may need a few seconds for the process and pid file to
     -- settle after start(). Poll for up to five seconds before reporting a
     -- failure.
-    showWhenRunning(25)
+    showWhenRunning(plugin, 25, true)
 end
 
 local function toggleFilebrowser(ctx)
@@ -361,38 +375,109 @@ local function installHoldHandler(TouchMenu)
 end
 
 local function installPluginMenuCompatibility(plugin)
-    if not plugin or plugin._mysui_filebrowser_menu_patched then return false end
+    if not plugin then return false end
+    if plugin._mysui_filebrowser_menu_patched then return true end
     local original_addToMainMenu = plugin.addToMainMenu
     if type(original_addToMainMenu) ~= "function" then return false end
 
     plugin._mysui_filebrowser_menu_patched = true
+    local original_start = plugin.start
+    if type(original_start) == "function" then
+        plugin.start = function(self, ...)
+            local should_show = autoShowEnabled() and not self._mysui_qr_start_managed
+            local results = { original_start(self, ...) }
+            if should_show then
+                showWhenRunning(self, 25, false)
+            end
+            return unpack(results)
+        end
+    end
+    local original_stop = plugin.stop
+    if type(original_stop) == "function" then
+        plugin.stop = function(self, ...)
+            closeQRCode()
+            return original_stop(self, ...)
+        end
+    end
+
     plugin.addToMainMenu = function(self, menu_items)
         local results = { original_addToMainMenu(self, menu_items) }
         local item = menu_items and menu_items[PLUGIN_ID]
-        if item and type(item.callback) == "function" then
-            local original_callback = item.callback
-            item.callback = function(touchmenu_instance)
-                -- FileBrowserPlus 1.2.0 unconditionally calls
-                -- touchmenu_instance:updateItems(). SimpleUI's plugin quick
-                -- action invokes this callback without a TouchMenu instance.
-                if touchmenu_instance == nil then
-                    return toggleFilebrowser()
-                end
-                return original_callback(touchmenu_instance)
+        if not item then return unpack(results) end
+
+        -- FileBrowserPlus 1.2.0 keeps its settings table inside the original
+        -- hold callback. Capture it without opening a menu, then rebuild the
+        -- plugin entry as an ordinary submenu like pre-1.2 releases.
+        local settings_items = {}
+        local original_hold_callback = item.hold_callback
+        if type(original_hold_callback) == "function" then
+            local capture_menu = {
+                onMenuSelect = function(_, dummy_item)
+                    if dummy_item and type(dummy_item.sub_item_table) == "table" then
+                        settings_items = dummy_item.sub_item_table
+                    end
+                end,
+            }
+            local ok_capture, err = pcall(original_hold_callback, capture_menu)
+            if not ok_capture then
+                logger.warn("mysimpleui_ext/filebrowserplus_qr: cannot capture 1.2 settings", tostring(err))
             end
         end
-        if item and type(item.hold_callback) == "function" then
-            local original_hold_callback = item.hold_callback
-            item.hold_callback = function(touchmenu_instance)
-                if touchmenu_instance == nil then
-                    return showQRCodeFromHold()
-                end
-                return original_hold_callback(touchmenu_instance)
-            end
+
+        local sub_items = {
+            {
+                text = "FileBrowserPlus 服务器",
+                checked_func = function()
+                    local ok, running = pcall(self.isRunning, self)
+                    return ok and running == true
+                end,
+                check_callback_updates_menu = true,
+                callback = function(touchmenu_instance)
+                    local ok, running = pcall(self.isRunning, self)
+                    if ok and running then
+                        closeQRCode()
+                        pcall(self.stop, self)
+                    else
+                        pcall(self.start, self)
+                    end
+                    if touchmenu_instance and type(touchmenu_instance.updateItems) == "function" then
+                        touchmenu_instance:updateItems()
+                    end
+                end,
+            },
+            {
+                text = "显示二维码",
+                enabled_func = function()
+                    local ok, running = pcall(self.isRunning, self)
+                    return ok and running == true
+                end,
+                callback = function()
+                    showQRCode(self)
+                end,
+            },
+        }
+        for _, settings_item in ipairs(settings_items) do
+            sub_items[#sub_items + 1] = settings_item
         end
+        sub_items[#sub_items + 1] = {
+            text = "启动时自动显示二维码",
+            checked_func = autoShowEnabled,
+            callback = function()
+                G_reader_settings:saveSetting(AUTO_SHOW_KEY, not autoShowEnabled())
+            end,
+        }
+
+        item.text = "FileBrowserPlus"
+        item.text_func = nil
+        item.checked_func = nil
+        item.callback = nil
+        item.keep_menu_open = nil
+        item.hold_callback = nil
+        item.hold_keep_menu_open = nil
+        item.sub_item_table = sub_items
         return unpack(results)
     end
-    logger.info("mysimpleui_ext/filebrowserplus_qr: patched FileBrowserPlus 1.2 menu callbacks")
+    logger.info("mysimpleui_ext/filebrowserplus_qr: injected FileBrowserPlus 1.2 QR menu")
     return true
 end
 
