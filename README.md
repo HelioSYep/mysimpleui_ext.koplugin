@@ -29,19 +29,18 @@
 SimpleUI → 快捷设置栏 → 滑块样式
 ```
 
-### `patch_filebrowserplus_qr.lua`：FileBrowserPlus 文件管理快捷操作
+### `patch_filebrowserplus_qr.lua`：FileBrowserPlus 二维码增强
 
-- 默认状态：开启；需要已安装并启用 [FileBrowserPlus](https://github.com/patelneeraj/filebrowserplus.koplugin)。
-- 在 `SimpleUI → 快捷设置栏 → 快捷操作` 中增加“文件管理 / FileBrowserPlus（二维码快捷开关）”；使用独立快捷操作 ID，避免与 FileBrowserPlus 1.2.0 自带菜单操作冲突。
-- 单击快捷操作可以切换 FileBrowserPlus：未运行时启动并居中显示二维码，运行中再次单击会停止服务；二维码下方同时显示 `IP:port`。
-- 关闭二维码只关闭弹窗，不会停止文件管理服务；长按快捷操作会再次显示正在运行的服务二维码。
-- 在 FileBrowserPlus 1.2.0 自身菜单中注入“FileBrowserPlus 服务器”“显示二维码”和“启动时自动显示二维码”，并保留其原有设置项；不修改 FileBrowserPlus 插件文件。
-- KOReader 不支持二维码组件时，会提示使用 `IP:port` 连接。
+- 默认状态：开启；直接补丁 FileBrowserPlus 1.2.x，不依赖 SimpleUI 快捷操作。
+- 将 FileBrowserPlus 顶层操作改为普通子菜单，同时保留原版端口、路径、密码、自动启动和自动停止设置。
+- 增加“显示二维码”和“启动时自动显示二维码”。
+- 默认在服务器启动后显示二维码；关闭二维码不会停止服务器。
+- 停止服务器时自动关闭二维码。
 
 补丁开关位于：
 
 ```text
-工具 → Simple UI 增强 → 增强功能 → 文件管理：FileBrowserPlus
+工具 → Simple UI 增强 → 增强功能 → FileBrowserPlus：二维码增强
 ```
 
 ## 安装
@@ -112,4 +111,3 @@ return {
 
 - [doctorhetfield-cmd/simpleui.koplugin](https://github.com/doctorhetfield-cmd/simpleui.koplugin)
 - `simpleui_ext.koplugin`：本项目的补丁发现与启停菜单以其结构为参考。
-- `filebrowserplus.koplugin（二维码版）`：FileBrowserPlus 二维码展示与网络地址获取逻辑参考。
