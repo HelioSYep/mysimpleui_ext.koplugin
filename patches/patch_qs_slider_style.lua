@@ -27,9 +27,10 @@ local CIRCLE_DIAMETER = Screen:scaleBySize(26)
 local CIRCLE_BORDER   = math.max(1, Screen:scaleBySize(1))
 local SMALL_BUTTON_WIDTH = Screen:scaleBySize(40)
 local MAX_BUTTON_WIDTH   = Screen:scaleBySize(50)
--- SimpleUI keeps 28 scaled units of panel padding on each side. Expanding the
--- circular slider row by 20 units per side leaves an 8-unit visual inset.
-local CIRCLE_EDGE_EXPANSION = Screen:scaleBySize(20)
+-- Narrow only the step-button hit boxes in circle mode. The released width is
+-- reassigned to the progress widget, keeping the complete row within bounds.
+local CIRCLE_STEP_BUTTON_WIDTH = Screen:scaleBySize(28)
+local CIRCLE_STEP_BUTTON_REDUCTION = SMALL_BUTTON_WIDTH - CIRCLE_STEP_BUTTON_WIDTH
 
 local SUISettings
 
@@ -264,7 +265,8 @@ local function patchPanelBuilder()
             and self.item_table
             and self.item_table._sui_qs_panel
         local warmth_widgets = {}
-        local removed_max_buttons = {}
+        local ProgressWidget
+        local original_progress_init
         local ButtonProgressWidget
         local original_bpw_init
         local Button
@@ -274,6 +276,24 @@ local function patchPanelBuilder()
         -- action. Intercept only the Buttons synchronously created while this
         -- panel is being built; restore the class immediately afterwards.
         if custom_panel and style == STYLE_CIRCLE then
+            local ok_progress, ProgressClass = pcall(require, "ui/widget/progresswidget")
+            if ok_progress and ProgressClass and type(ProgressClass.init) == "function" then
+                ProgressWidget = ProgressClass
+                original_progress_init = ProgressClass.init
+                ProgressClass.init = function(widget, ...)
+                    original_progress_init(widget, ...)
+                    if not widget._mysui_circle_layout_width then
+                        widget._mysui_circle_layout_width = true
+                        widget.width = (widget.width or 0)
+                            + MAX_BUTTON_WIDTH
+                            + 2 * CIRCLE_STEP_BUTTON_REDUCTION
+                        if widget.dimen then
+                            widget.dimen.w = widget.width
+                        end
+                    end
+                end
+            end
+
             local ok_button, ButtonClass = pcall(require, "ui/widget/button")
             if ok_button and ButtonClass and type(ButtonClass.init) == "function" then
                 Button = ButtonClass
@@ -298,12 +318,17 @@ local function patchPanelBuilder()
                     end
                     original_button_init(widget, ...)
 
-                    if is_step_button and widget.frame then
-                        widget.frame.bordersize = 0
-                        widget.frame.color = Blitbuffer.COLOR_WHITE
+                    if is_step_button then
+                        widget.width = CIRCLE_STEP_BUTTON_WIDTH
+                        if widget.dimen then
+                            widget.dimen.w = CIRCLE_STEP_BUTTON_WIDTH
+                        end
+                        if widget.frame then
+                            widget.frame.bordersize = 0
+                            widget.frame.color = Blitbuffer.COLOR_WHITE
+                        end
                     elseif is_max_button then
                         local original_size = widget:getSize()
-                        widget._mysui_removed_width = original_size.w or width or 0
                         widget.callback = nil
                         widget.enabled = false
                         widget.hidden = true
@@ -323,7 +348,6 @@ local function patchPanelBuilder()
                             return { w = 0, h = original_size.h or 0 }
                         end
                         widget.paintTo = function() end
-                        removed_max_buttons[#removed_max_buttons + 1] = widget
                     end
                 end
             end
@@ -336,6 +360,15 @@ local function patchPanelBuilder()
                 original_bpw_init = BPW.init
                 BPW.init = function(widget, ...)
                     original_bpw_init(widget, ...)
+                    if style == STYLE_CIRCLE and not widget._mysui_circle_layout_width then
+                        widget._mysui_circle_layout_width = true
+                        widget.width = (widget.width or 0)
+                            + MAX_BUTTON_WIDTH
+                            + 2 * CIRCLE_STEP_BUTTON_REDUCTION
+                        if type(widget.update) == "function" then
+                            widget:update()
+                        end
+                    end
                     warmth_widgets[#warmth_widgets + 1] = widget
                 end
             end
@@ -345,6 +378,9 @@ local function patchPanelBuilder()
         if ButtonProgressWidget and original_bpw_init then
             ButtonProgressWidget.init = original_bpw_init
         end
+        if ProgressWidget and original_progress_init then
+            ProgressWidget.init = original_progress_init
+        end
         if Button and original_button_init then
             Button.init = original_button_init
         end
@@ -352,23 +388,6 @@ local function patchPanelBuilder()
 
         if custom_panel then
             local refs = self._sui_qs_refs
-            if style == STYLE_CIRCLE then
-                -- Reassign the removed Max button width to the actual slider,
-                -- placing the plain + glyph at the right edge like the photo.
-                if refs and refs.fl_progress and removed_max_buttons[1] then
-                    refs.fl_progress.width = refs.fl_progress.width
-                        + removed_max_buttons[1]._mysui_removed_width
-                        + 2 * CIRCLE_EDGE_EXPANSION
-                end
-                if warmth_widgets[1] and removed_max_buttons[2] then
-                    warmth_widgets[1].width = warmth_widgets[1].width
-                        + removed_max_buttons[2]._mysui_removed_width
-                        + 2 * CIRCLE_EDGE_EXPANSION
-                    if type(warmth_widgets[1].update) == "function" then
-                        warmth_widgets[1]:update()
-                    end
-                end
-            end
             if refs then applyCustomBrightnessStyle(refs.fl_progress) end
             for _, widget in ipairs(warmth_widgets) do
                 applyCustomWarmthStyle(widget)
