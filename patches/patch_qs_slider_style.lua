@@ -5,6 +5,7 @@ local BD         = require("ui/bidi")
 local Blitbuffer = require("ffi/blitbuffer")
 local Device     = require("device")
 local Geom       = require("ui/geometry")
+local GestureRange = require("ui/gesturerange")
 local UIManager  = require("ui/uimanager")
 local logger     = require("logger")
 
@@ -13,7 +14,7 @@ local Screen = Device.screen
 local P = {
     id              = "qs_slider_style",
     name            = "前光灯：滑块样式",
-    description     = "为 SimpleUI 快捷设置栏添加“原版 / 细线 / 圆形”滑块样式选择，并同步到 KOReader 原生前光灯窗口；自动兼容仅亮度和亮度＋色温设备。",
+    description     = "为 SimpleUI 快捷设置栏添加“原版 / 细线 / 圆形”滑块样式选择，同步到 KOReader 原生前光灯窗口，并为亮度和色温提供跟手实时拖动。",
     default_enabled = true,
 }
 
@@ -60,6 +61,90 @@ end
 
 local function clampPercentage(value)
     return math.max(0, math.min(1, tonumber(value) or 0))
+end
+
+local function positionIntersects(pos, dimen)
+    if not pos or not dimen then return false end
+    if type(pos.intersectWith) == "function" then
+        return pos:intersectWith(dimen)
+    end
+    return pos.x and pos.y
+        and pos.x >= (dimen.x or 0)
+        and pos.x <= (dimen.x or 0) + (dimen.w or 0)
+        and pos.y >= (dimen.y or 0)
+        and pos.y <= (dimen.y or 0) + (dimen.h or 0)
+end
+
+local function percentageFromPosition(widget, pos)
+    local dimen = widget and widget.dimen
+    if not dimen or not pos or not pos.x then return nil end
+    local width = tonumber(dimen.w) or tonumber(widget.width) or 0
+    if width <= 0 then return nil end
+    local percentage = (pos.x - (dimen.x or 0)) / width
+    if mirroredFor(widget) then percentage = 1 - percentage end
+    return clampPercentage(percentage)
+end
+
+local function sliderAtPosition(refs, pos)
+    if refs and refs.fl_progress
+            and positionIntersects(pos, refs.fl_progress.dimen) then
+        return "brightness"
+    end
+    if refs and refs.nl_progress
+            and positionIntersects(pos, refs.nl_progress.dimen) then
+        return "warmth"
+    end
+end
+
+local function adjustSimpleSlider(menu, slider, pos, final)
+    local refs = menu and menu._sui_qs_refs
+    if not refs then return false end
+
+    if slider == "brightness" then
+        local progress = refs.fl_progress
+        local percentage = percentageFromPosition(progress, pos)
+        local state = refs.fl_state
+        if not percentage or not state or type(refs.setBrightness) ~= "function" then
+            return false
+        end
+        local minimum = tonumber(state.min) or 0
+        local maximum = tonumber(state.max) or minimum
+        local value = math.floor(minimum + percentage * (maximum - minimum) + 0.5)
+        if final or value ~= menu._mysui_last_drag_brightness then
+            menu._mysui_last_drag_brightness = value
+            refs.setBrightness(value)
+        end
+        return true
+    end
+
+    if slider == "warmth" then
+        local progress = refs.nl_progress
+        local percentage = percentageFromPosition(progress, pos)
+        if not percentage or not progress or type(progress.callback) ~= "function" then
+            return false
+        end
+
+        local powerd = Device:getPowerDevice()
+        local minimum = tonumber(powerd.fl_warmth_min) or 0
+        local maximum = tonumber(powerd.fl_warmth_max) or minimum
+        local steps = maximum - minimum + 1
+        local stride = math.ceil(steps * (1 / 25))
+        local native_value = math.floor(minimum + percentage * (maximum - minimum) + 0.5)
+        if final or native_value ~= menu._mysui_last_drag_warmth then
+            menu._mysui_last_drag_warmth = native_value
+            -- SimpleUI's callback accepts a numeric step index. A fractional
+            -- index maps back to an exact native warmth value, so dragging is
+            -- continuous instead of snapping to the visible button segments.
+            progress.callback(native_value / stride)
+            progress.position = percentage * (tonumber(progress.num_buttons) or 0)
+            if (final or getStyle() == STYLE_ORIGINAL)
+                    and type(progress.update) == "function" then
+                progress:update()
+            end
+        end
+        return true
+    end
+    return false
 end
 
 local function paintCustomTrack(widget, bb, x, y, width, height, percentage, clear_first)
@@ -278,9 +363,8 @@ local function patchPanelBuilder()
 
     TouchMenu.updateItems = function(self, ...)
         local style = getStyle()
-        local custom_panel = style ~= STYLE_ORIGINAL
-            and self.item_table
-            and self.item_table._sui_qs_panel
+        local quick_panel = self.item_table and self.item_table._sui_qs_panel
+        local custom_panel = style ~= STYLE_ORIGINAL and quick_panel
         local warmth_widgets = {}
         local ProgressWidget
         local original_progress_init
@@ -370,7 +454,7 @@ local function patchPanelBuilder()
             end
         end
 
-        if custom_panel and Device:hasNaturalLight() then
+        if quick_panel and Device:hasNaturalLight() then
             local ok_bpw, BPW = pcall(require, "ui/widget/buttonprogresswidget")
             if ok_bpw and BPW and type(BPW.init) == "function" then
                 ButtonProgressWidget = BPW
@@ -411,6 +495,20 @@ local function patchPanelBuilder()
         end
         if not results[1] then error(results[2]) end
 
+        if quick_panel then
+            local refs = self._sui_qs_refs
+            if refs then
+                refs.nl_progress = warmth_widgets[#warmth_widgets]
+            end
+            self._mysui_slider_drag = nil
+            self._mysui_last_drag_brightness = nil
+            self._mysui_last_drag_warmth = nil
+            self.ges_events = self.ges_events or {}
+            self.ges_events.MysuiSliderPanRelease = {
+                GestureRange:new{ ges = "pan_release", range = self.dimen },
+            }
+        end
+
         if custom_panel then
             local refs = self._sui_qs_refs
             if refs then applyCustomBrightnessStyle(refs.fl_progress) end
@@ -423,6 +521,52 @@ local function patchPanelBuilder()
         table.remove(results, 1)
         return unpack(results)
     end
+
+    local original_onTap = TouchMenu.onTapCloseAllMenus
+    TouchMenu.onTapCloseAllMenus = function(self, arg, ges_ev)
+        local refs = self._sui_qs_refs
+        local slider = refs and sliderAtPosition(refs, ges_ev and ges_ev.pos)
+        if slider and adjustSimpleSlider(self, slider, ges_ev.pos, true) then
+            self._mysui_slider_drag = nil
+            return true
+        end
+        if original_onTap then return original_onTap(self, arg, ges_ev) end
+    end
+
+    local original_onPan = TouchMenu.onPan
+    TouchMenu.onPan = function(self, arg, ges_ev)
+        if self._sui_qs_refs and ges_ev and not ges_ev.mousewheel_direction then
+            local slider = self._mysui_slider_drag
+                or sliderAtPosition(self._sui_qs_refs, ges_ev.pos)
+            if slider then
+                self._mysui_slider_drag = slider
+                if adjustSimpleSlider(self, slider, ges_ev.pos, false) then
+                    return true
+                end
+            end
+        end
+        if original_onPan then return original_onPan(self, arg, ges_ev) end
+    end
+
+    local original_onSwipe = TouchMenu.onSwipe
+    TouchMenu.onSwipe = function(self, arg, ges_ev)
+        if self._mysui_slider_drag and ges_ev then
+            local slider = self._mysui_slider_drag
+            self._mysui_slider_drag = nil
+            adjustSimpleSlider(self, slider, ges_ev.pos, true)
+            return true
+        end
+        if original_onSwipe then return original_onSwipe(self, arg, ges_ev) end
+    end
+
+    TouchMenu.onMysuiSliderPanRelease = function(self, arg, ges_ev)
+        local slider = self._mysui_slider_drag
+        self._mysui_slider_drag = nil
+        if slider and ges_ev then
+            adjustSimpleSlider(self, slider, ges_ev.pos, true)
+            return true
+        end
+    end
     return true
 end
 
@@ -431,8 +575,30 @@ local function patchNativeFrontlight()
     if FrontLightWidget._mysui_slider_style_patched then return true end
 
     local original_layout = FrontLightWidget.layout
+    local original_onTapProgress = FrontLightWidget.onTapProgress
+    local original_onPanProgress = FrontLightWidget.onPanProgress
     if type(original_layout) ~= "function" then
         error("FrontLightWidget.layout is unavailable")
+    end
+
+    local function adjustNativeWarmth(widget, pos)
+        local progress = widget.nl_progress
+        local percentage = percentageFromPosition(progress, pos)
+        if not percentage or not widget.nl or type(widget.setWarmth) ~= "function" then
+            return false
+        end
+
+        local minimum = tonumber(widget.nl.min) or 0
+        local maximum = tonumber(widget.nl.max) or minimum
+        local value = math.floor(minimum + percentage * (maximum - minimum) + 0.5)
+        if value ~= widget.nl.cur then
+            widget:setWarmth(value, true)
+        end
+        if getStyle() ~= STYLE_ORIGINAL then
+            progress.position = percentage * (tonumber(progress.num_buttons) or 0)
+            UIManager:setDirty(widget, "ui")
+        end
+        return true
     end
 
     FrontLightWidget._mysui_slider_style_patched = true
@@ -448,37 +614,56 @@ local function patchNativeFrontlight()
             applyCustomWarmthStyle(self.nl_progress)
         end
 
-        if style == STYLE_CIRCLE then
-            local function hideMax(control_row, marker_name)
-                local max_button = control_row and control_row[#control_row]
-                if not max_button then return end
-
-                max_button.callback = nil
-                max_button.enabled = false
-                max_button.hidden = true
-                max_button.no_focus = true
-                max_button.focusable = false
-                max_button.ges_events = {}
-                if max_button.label_widget then
-                    max_button.label_widget.hide = true
-                end
-                max_button.paintTo = function() end
-                self[marker_name] = max_button
-                table.remove(control_row, #control_row)
-            end
-
-            -- Brightness Max is the last control in focus row 2. Warmth Max
-            -- is the last control in row 5 (Configure, when present, is
-            -- inserted before it). Hide both so the paired sliders follow the
-            -- same circular-style removal rule as the SimpleUI panel.
-            hideMax(self.layout and self.layout[2], "_mysui_hidden_brightness_max")
-            if self.has_nl then
-                hideMax(self.layout and self.layout[5], "_mysui_hidden_warmth_max")
-            end
+        if self.ges_events then
+            self.ges_events.MysuiNativeSliderPanRelease = {
+                GestureRange:new{
+                    ges = "pan_release",
+                    range = Geom:new{
+                        x = 0, y = 0,
+                        w = self.screen_width,
+                        h = self.screen_height,
+                    },
+                },
+            }
         end
 
         table.remove(results, 1)
         return unpack(results)
+    end
+
+    FrontLightWidget.onTapProgress = function(self, arg, ges_ev)
+        if self.has_nl and self.nl_progress
+                and positionIntersects(ges_ev and ges_ev.pos, self.nl_progress.dimen)
+                and adjustNativeWarmth(self, ges_ev.pos) then
+            self._mysui_native_slider_drag = nil
+            return true
+        end
+        if original_onTapProgress then
+            return original_onTapProgress(self, arg, ges_ev)
+        end
+    end
+
+    FrontLightWidget.onPanProgress = function(self, arg, ges_ev)
+        if self.has_nl and self.nl_progress and ges_ev then
+            local dragging_warmth = self._mysui_native_slider_drag == "warmth"
+            if dragging_warmth
+                    or positionIntersects(ges_ev.pos, self.nl_progress.dimen) then
+                self._mysui_native_slider_drag = "warmth"
+                if adjustNativeWarmth(self, ges_ev.pos) then return true end
+            end
+        end
+        if original_onPanProgress then
+            return original_onPanProgress(self, arg, ges_ev)
+        end
+    end
+
+    FrontLightWidget.onMysuiNativeSliderPanRelease = function(self, arg, ges_ev)
+        local dragging_warmth = self._mysui_native_slider_drag == "warmth"
+        self._mysui_native_slider_drag = nil
+        if dragging_warmth and ges_ev then
+            adjustNativeWarmth(self, ges_ev.pos)
+            return true
+        end
     end
     return true
 end
