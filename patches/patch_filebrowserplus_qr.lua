@@ -46,14 +46,53 @@ local function resolveFilebrowser(ctx)
     return nil
 end
 
-local function endpointFor(plugin)
+local function usableIP(value)
+    if type(value) ~= "string" then return nil end
+    value = value:match("^%s*(.-)%s*$")
+    if value == "" then return nil end
+    return value:match("(%d+%.%d+%.%d+%.%d+)") or value
+end
+
+local function getIPAddress(plugin)
     local ip
     if type(plugin.getIPAddress) == "function" then
         local ok, value = pcall(plugin.getIPAddress, plugin)
-        if ok and type(value) == "string" and value ~= "" then ip = value end
+        if ok then ip = usableIP(value) end
     end
+
+    -- FileBrowserPlus releases do not consistently expose getIPAddress().
+    -- Use the same device/network fallbacks as the QR-enabled fork.
+    if not ip and type(Device.retrieveNetworkInfo) == "function" then
+        local ok, net_info = pcall(Device.retrieveNetworkInfo, Device)
+        if ok and type(net_info) == "table" then
+            ip = usableIP(net_info.ip)
+        elseif ok then
+            ip = usableIP(net_info)
+        end
+    end
+
+    if not ip then
+        local ok_network, NetworkMgr = pcall(require, "ui/network/manager")
+        if ok_network and NetworkMgr then
+            for _, method_name in ipairs({ "getIPAddress", "getLocalIpAddress" }) do
+                local method = NetworkMgr[method_name]
+                if type(method) == "function" then
+                    local ok, value = pcall(method, NetworkMgr)
+                    if ok then ip = usableIP(value) end
+                    if ip then break end
+                end
+            end
+        end
+    end
+
+    return ip
+end
+
+local function endpointFor(plugin)
+    local ip = getIPAddress(plugin)
+    if not ip then return nil end
     local port = tostring(plugin.filebrowserplus_port or "80")
-    local display = (ip and ip or "") .. ":" .. port
+    local display = ip .. ":" .. port
     return display, "http://" .. display
 end
 
@@ -76,14 +115,19 @@ local function showQRCode(plugin)
         return
     end
 
+    local display, url = endpointFor(plugin)
+    if not display then
+        unavailable("无法获取设备 IP 地址，请确认 Wi-Fi 已连接。")
+        return
+    end
+
     local ok_qr, QRWidget = pcall(require, "ui/widget/qrwidget")
     if not ok_qr or not QRWidget then
-        unavailable("当前 KOReader 不支持二维码显示，请使用 IP:port 连接。")
+        unavailable("当前 KOReader 不支持二维码显示，请使用 " .. display .. " 连接。")
         return
     end
 
     closeQRCode()
-    local display, url = endpointFor(plugin)
     local side = math.floor(math.min(
         Device.screen:getWidth() * 0.62,
         Device.screen:getHeight() * 0.56
@@ -194,6 +238,8 @@ local function ensureRunningAndShow(ctx)
             UIManager:scheduleIn(0.2, function()
                 showWhenRunning(attempts_left - 1)
             end)
+        else
+            unavailable("FileBrowserPlus 启动后未检测到服务，请检查插件设置和日志。")
         end
     end
     showWhenRunning(5)
@@ -263,22 +309,34 @@ local function installHoldHandler(TouchMenu)
             end
         end
 
+        if panel then
+            panel._mysui_filebrowser_qr_hold_target = nil
+        end
+
         local slots = SUISettings and SUISettings:readSetting(SLOTS_KEY) or nil
         if panel and refs and type(slots) == "table" then
             for index, action_id in ipairs(slots) do
                 local ref = refs.buttons and refs.buttons[index]
                 if action_id == ACTION_ID and ref and ref.widget then
-                    local original_onGesture = panel.onGesture
-                    panel.onGesture = function(panel_self, event)
-                        if event and event.ges == "hold"
-                                and event.pos and ref.widget.dimen
-                                and event.pos:intersectWith(ref.widget.dimen) then
-                            showQRCodeFromHold()
-                            return true
-                        end
-                        return original_onGesture(panel_self, event)
-                    end
+                    panel._mysui_filebrowser_qr_hold_target = ref.widget
                     break
+                end
+            end
+        end
+
+        if panel and not panel._mysui_filebrowser_qr_hold_patched then
+            local original_onGesture = panel.onGesture
+            panel._mysui_filebrowser_qr_hold_patched = true
+            panel.onGesture = function(panel_self, event)
+                local target = panel_self._mysui_filebrowser_qr_hold_target
+                if target and event and event.ges == "hold"
+                        and event.pos and target.dimen
+                        and event.pos:intersectWith(target.dimen) then
+                    showQRCodeFromHold()
+                    return true
+                end
+                if type(original_onGesture) == "function" then
+                    return original_onGesture(panel_self, event)
                 end
             end
         end

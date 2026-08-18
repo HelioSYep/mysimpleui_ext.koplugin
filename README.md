@@ -111,3 +111,4 @@ return {
 
 - [doctorhetfield-cmd/simpleui.koplugin](https://github.com/doctorhetfield-cmd/simpleui.koplugin)
 - `simpleui_ext.koplugin`：本项目的补丁发现与启停菜单以其结构为参考。
+- `filebrowserplus.koplugin（二维码版）`：FileBrowserPlus 二维码展示与网络地址获取逻辑参考。
