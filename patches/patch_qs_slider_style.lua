@@ -14,6 +14,8 @@ local Screen = Device.screen
 local P = {
     id              = "qs_slider_style",
     name            = "前光灯：滑块样式",
+    plugin_name     = "SimpleUI",
+    plugin_order    = 10,
     description     = "为 SimpleUI 快捷设置栏添加“原版 / 细线 / 圆形”滑块样式选择，同步到 KOReader 原生前光灯窗口，并为亮度和色温提供跟手实时拖动。",
     default_enabled = true,
 }

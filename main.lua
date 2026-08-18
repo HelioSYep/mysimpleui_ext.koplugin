@@ -150,58 +150,87 @@ function MySimpleUIExt:_loadAndApplyPatches()
     end
 end
 
-function MySimpleUIExt:_buildPatchMenu()
-    local items = {}
+function MySimpleUIExt:_buildPatchItem(patch)
+    local item_patch = patch
+    return {
+        text         = item_patch.name,
+        help_text    = item_patch.runtime_error
+            and (item_patch.description .. "\n\n当前启动错误：" .. item_patch.runtime_error)
+            or item_patch.description,
+        checked_func = function() return self:_isPatchEnabled(item_patch) end,
+        callback     = function()
+            local enabled = self:_isPatchEnabled(item_patch)
+            self:_setPatchEnabled(item_patch.id, not enabled)
+            UIManager:show(InfoMessage:new{
+                text = string.format(
+                    "%s已%s。\n\n请重启 KOReader 使更改生效。",
+                    item_patch.name,
+                    enabled and "关闭" or "开启"
+                ),
+                timeout = 3,
+            })
+        end,
+    }
+end
+
+function MySimpleUIExt:_buildPluginMenu()
+    local groups_by_name = {}
+    local groups = {}
 
     for _, patch in ipairs(self._patches_meta) do
-        local item_patch = patch
+        local plugin_name = patch.plugin_name or "其他"
+        local group = groups_by_name[plugin_name]
+        if not group then
+            group = {
+                name = plugin_name,
+                order = patch.plugin_order or 1000,
+                patches = {},
+            }
+            groups_by_name[plugin_name] = group
+            groups[#groups + 1] = group
+        end
+        group.patches[#group.patches + 1] = patch
+    end
+
+    table.sort(groups, function(left, right)
+        if left.order == right.order then return left.name < right.name end
+        return left.order < right.order
+    end)
+
+    local items = {}
+    for _, group in ipairs(groups) do
+        local patch_items = {}
+        for _, patch in ipairs(group.patches) do
+            patch_items[#patch_items + 1] = self:_buildPatchItem(patch)
+        end
         items[#items + 1] = {
-            text         = item_patch.name,
-            help_text    = item_patch.runtime_error
-                and (item_patch.description .. "\n\n当前启动错误：" .. item_patch.runtime_error)
-                or item_patch.description,
-            checked_func = function() return self:_isPatchEnabled(item_patch) end,
-            callback     = function()
-                local enabled = self:_isPatchEnabled(item_patch)
-                self:_setPatchEnabled(item_patch.id, not enabled)
-                UIManager:show(InfoMessage:new{
-                    text = string.format(
-                        "%s已%s。\n\n请重启 KOReader 使更改生效。",
-                        item_patch.name,
-                        enabled and "关闭" or "开启"
-                    ),
-                    timeout = 3,
-                })
-            end,
+            text = group.name,
+            sub_item_table = patch_items,
         }
     end
 
     if #items == 0 then
-        items[1] = { text = "没有发现增强补丁", enabled = false }
+        items[1] = { text = "没有发现插件增强", enabled = false }
     end
+
+    items[#items + 1] = {
+        text = "关于",
+        keep_menu_open = true,
+        callback = function()
+            UIManager:show(InfoMessage:new{
+                text = "插件增强 v0.5.7\n\n"
+                    .. "用于集中管理 KOReader 插件增强补丁。",
+            })
+        end,
+    }
     return items
 end
 
 function MySimpleUIExt:addToMainMenu(menu_items)
     menu_items[PLUGIN_ID] = {
-        text = "Simple UI 增强",
+        text = "插件增强",
         sorting_hint = "tools",
-        sub_item_table = {
-            {
-                text = "增强功能",
-                sub_item_table_func = function() return self:_buildPatchMenu() end,
-            },
-            {
-                text = "关于",
-                keep_menu_open = true,
-                callback = function()
-                    UIManager:show(InfoMessage:new{
-                        text = "Simple UI 增强 v0.5.1\n\n"
-                            .. "用于集中管理提升 SimpleUI 易用性的个人补丁。",
-                    })
-                end,
-            },
-        },
+        sub_item_table_func = function() return self:_buildPluginMenu() end,
     }
 end
 

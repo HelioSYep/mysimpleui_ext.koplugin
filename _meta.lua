@@ -1,6 +1,6 @@
 return {
     name        = "mysimpleui_ext",
-    fullname    = "Simple UI 增强",
-    description = "提升 SimpleUI 易用性的个人增强插件。",
-    version     = "0.5.6",
+    fullname    = "插件增强",
+    description = "集中管理 KOReader 插件增强补丁。",
+    version     = "0.5.7",
 }
