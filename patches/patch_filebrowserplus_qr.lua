@@ -374,16 +374,37 @@ local function installHoldHandler(TouchMenu)
     return true
 end
 
+local function invalidatePluginMenu(plugin)
+    local menu = plugin and plugin.ui and plugin.ui.menu
+    if not menu then return end
+    -- KOReader caches the merged main menu after its first build. Dropping
+    -- the cache makes the next menu opening call every registered widget's
+    -- addToMainMenu() again, including our patched FileBrowserPlus class.
+    menu.tab_item_table = nil
+    if type(menu.menu_items) == "table" then
+        menu.menu_items[PLUGIN_ID] = nil
+    end
+end
+
 local function installPluginMenuCompatibility(plugin)
     if not plugin then return false end
-    if plugin._mysui_filebrowser_menu_patched then return true end
-    local original_addToMainMenu = plugin.addToMainMenu
+    -- Patch the class rather than a single instance: KOReader creates a new
+    -- FileBrowserPlus instance when switching between FileManager/ReaderUI.
+    local target = getmetatable(plugin)
+    if not target or type(target.addToMainMenu) ~= "function" then
+        target = plugin
+    end
+    if target._mysui_filebrowser_menu_patched then
+        invalidatePluginMenu(plugin)
+        return true
+    end
+    local original_addToMainMenu = target.addToMainMenu
     if type(original_addToMainMenu) ~= "function" then return false end
 
-    plugin._mysui_filebrowser_menu_patched = true
-    local original_start = plugin.start
+    target._mysui_filebrowser_menu_patched = true
+    local original_start = target.start
     if type(original_start) == "function" then
-        plugin.start = function(self, ...)
+        target.start = function(self, ...)
             local should_show = autoShowEnabled() and not self._mysui_qr_start_managed
             local results = { original_start(self, ...) }
             if should_show then
@@ -392,15 +413,15 @@ local function installPluginMenuCompatibility(plugin)
             return unpack(results)
         end
     end
-    local original_stop = plugin.stop
+    local original_stop = target.stop
     if type(original_stop) == "function" then
-        plugin.stop = function(self, ...)
+        target.stop = function(self, ...)
             closeQRCode()
             return original_stop(self, ...)
         end
     end
 
-    plugin.addToMainMenu = function(self, menu_items)
+    target.addToMainMenu = function(self, menu_items)
         local results = { original_addToMainMenu(self, menu_items) }
         local item = menu_items and menu_items[PLUGIN_ID]
         if not item then return unpack(results) end
@@ -477,6 +498,7 @@ local function installPluginMenuCompatibility(plugin)
         item.sub_item_table = sub_items
         return unpack(results)
     end
+    invalidatePluginMenu(plugin)
     logger.info("mysimpleui_ext/filebrowserplus_qr: injected FileBrowserPlus 1.2 QR menu")
     return true
 end
