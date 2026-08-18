@@ -19,6 +19,14 @@ local P = {
 }
 
 local SUISettings
+-- Some FileBrowserPlus releases expect start()/stop() to receive the
+-- TouchMenu instance used by their own menu callback and call updateItems()
+-- on it. A SimpleUI quick action has no such instance, so provide the small
+-- compatible surface those releases need. Older releases ignore the extra
+-- argument.
+local TOUCHMENU_PROXY = {
+    updateItems = function() end,
+}
 
 local function unavailable(message)
     local InfoMessage = require("ui/widget/infomessage")
@@ -113,6 +121,16 @@ local function showQRCode(plugin)
     if not ok_running or not running then
         unavailable("FileBrowserPlus 服务尚未运行。")
         return
+    end
+
+    -- Prefer the QR screen supplied by QR-enabled FileBrowserPlus builds.
+    -- Besides matching that plugin's UI, this also lets it use its own
+    -- version-specific network discovery and close/stop handling. The local
+    -- dialog below remains a fallback for the regular upstream plugin.
+    if type(plugin.showQRCode) == "function" then
+        local ok_native, err = pcall(plugin.showQRCode, plugin)
+        if ok_native then return end
+        logger.warn("mysimpleui_ext: native FileBrowserPlus QR failed", tostring(err))
     end
 
     local display, url = endpointFor(plugin)
@@ -221,7 +239,7 @@ local function ensureRunningAndShow(ctx)
         return
     end
 
-    local ok_start, err = pcall(plugin.start, plugin)
+    local ok_start, err = pcall(plugin.start, plugin, TOUCHMENU_PROXY)
     if not ok_start then
         logger.warn("mysimpleui_ext: FileBrowserPlus start failed", tostring(err))
         unavailable("FileBrowserPlus 启动失败。")
@@ -242,7 +260,10 @@ local function ensureRunningAndShow(ctx)
             unavailable("FileBrowserPlus 启动后未检测到服务，请检查插件设置和日志。")
         end
     end
-    showWhenRunning(5)
+    -- Slower devices may need a few seconds for the process and pid file to
+    -- settle after start(). Poll for up to five seconds before reporting a
+    -- failure.
+    showWhenRunning(25)
 end
 
 local function toggleFilebrowser(ctx)
@@ -260,7 +281,7 @@ local function toggleFilebrowser(ctx)
 
     if running then
         closeQRCode()
-        local ok_stop, err = pcall(plugin.stop, plugin)
+        local ok_stop, err = pcall(plugin.stop, plugin, TOUCHMENU_PROXY)
         if not ok_stop then
             logger.warn("mysimpleui_ext: FileBrowserPlus stop failed", tostring(err))
             unavailable("FileBrowserPlus 停止失败。")
