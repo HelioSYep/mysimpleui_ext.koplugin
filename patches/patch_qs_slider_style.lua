@@ -23,10 +23,13 @@ local STYLE_CIRCLE   = "circle"
 local TRACK_HEIGHT   = Screen:scaleBySize(2)
 local THUMB_WIDTH    = Screen:scaleBySize(3)
 local THUMB_HEIGHT   = Screen:scaleBySize(14)
-local CIRCLE_DIAMETER = Screen:scaleBySize(22)
+local CIRCLE_DIAMETER = Screen:scaleBySize(26)
 local CIRCLE_BORDER   = math.max(1, Screen:scaleBySize(1))
 local SMALL_BUTTON_WIDTH = Screen:scaleBySize(40)
 local MAX_BUTTON_WIDTH   = Screen:scaleBySize(50)
+-- SimpleUI keeps 28 scaled units of panel padding on each side. Expanding the
+-- circular slider row by 20 units per side leaves an 8-unit visual inset.
+local CIRCLE_EDGE_EXPANSION = Screen:scaleBySize(20)
 
 local SUISettings
 
@@ -287,6 +290,11 @@ local function patchPanelBuilder()
 
                     if is_step_button then
                         widget.bordersize = 0
+                    elseif is_max_button then
+                        -- Blank the label before Button:init() creates its
+                        -- TextWidget, preventing any glyph/line residue even
+                        -- if a parent takes an unexpected paint path.
+                        widget.text = ""
                     end
                     original_button_init(widget, ...)
 
@@ -298,7 +306,18 @@ local function patchPanelBuilder()
                         widget._mysui_removed_width = original_size.w or width or 0
                         widget.callback = nil
                         widget.enabled = false
+                        widget.hidden = true
+                        widget.no_focus = true
+                        widget.focusable = false
                         widget.ges_events = {}
+                        if widget.label_widget then
+                            widget.label_widget.hide = true
+                        end
+                        if widget.frame then
+                            widget.frame.bordersize = 0
+                            widget.frame.background = Blitbuffer.COLOR_WHITE
+                            widget.frame.invert = false
+                        end
                         widget.dimen.w = 0
                         widget.getSize = function()
                             return { w = 0, h = original_size.h or 0 }
@@ -339,10 +358,12 @@ local function patchPanelBuilder()
                 if refs and refs.fl_progress and removed_max_buttons[1] then
                     refs.fl_progress.width = refs.fl_progress.width
                         + removed_max_buttons[1]._mysui_removed_width
+                        + 2 * CIRCLE_EDGE_EXPANSION
                 end
                 if warmth_widgets[1] and removed_max_buttons[2] then
                     warmth_widgets[1].width = warmth_widgets[1].width
                         + removed_max_buttons[2]._mysui_removed_width
+                        + 2 * CIRCLE_EDGE_EXPANSION
                     if type(warmth_widgets[1].update) == "function" then
                         warmth_widgets[1]:update()
                     end
