@@ -12,16 +12,19 @@ local Screen = Device.screen
 local P = {
     id              = "qs_slider_style",
     name            = "快捷设置栏：滑块样式",
-    description     = "为 SimpleUI 快捷设置栏添加“原版 / 细线”滑块样式选择；自动兼容仅亮度和亮度＋色温设备。",
+    description     = "为 SimpleUI 快捷设置栏添加“原版 / 细线 / 圆形”滑块样式选择；自动兼容仅亮度和亮度＋色温设备。",
     default_enabled = true,
 }
 
 local STYLE_KEY      = "simpleui_qs_bar_slider_style"
 local STYLE_ORIGINAL = "original"
 local STYLE_THIN     = "thin"
+local STYLE_CIRCLE   = "circle"
 local TRACK_HEIGHT   = Screen:scaleBySize(2)
 local THUMB_WIDTH    = Screen:scaleBySize(3)
 local THUMB_HEIGHT   = Screen:scaleBySize(14)
+local CIRCLE_DIAMETER = Screen:scaleBySize(22)
+local CIRCLE_BORDER   = math.max(1, Screen:scaleBySize(1))
 
 local SUISettings
 
@@ -37,8 +40,9 @@ local function requireFirst(...)
 end
 
 local function getStyle()
-    return SUISettings:readSetting(STYLE_KEY) == STYLE_THIN
-        and STYLE_THIN or STYLE_ORIGINAL
+    local style = SUISettings:readSetting(STYLE_KEY)
+    if style == STYLE_THIN or style == STYLE_CIRCLE then return style end
+    return STYLE_ORIGINAL
 end
 
 local function mirroredFor(widget)
@@ -51,7 +55,7 @@ local function clampPercentage(value)
     return math.max(0, math.min(1, tonumber(value) or 0))
 end
 
-local function paintThinTrack(widget, bb, x, y, width, height, percentage, clear_first)
+local function paintCustomTrack(widget, bb, x, y, width, height, percentage, clear_first)
     width = math.max(0, math.floor(tonumber(width) or 0))
     height = math.max(0, math.floor(tonumber(height) or 0))
     if clear_first and width > 0 and height > 0 then
@@ -80,20 +84,47 @@ local function paintThinTrack(widget, bb, x, y, width, height, percentage, clear
         end
     end
 
-    local thumb_x = marker_x - math.floor(THUMB_WIDTH / 2)
-    thumb_x = math.max(x, math.min(x + width - THUMB_WIDTH, thumb_x))
-    bb:paintRect(
-        thumb_x,
-        center_y - math.floor(THUMB_HEIGHT / 2),
-        THUMB_WIDTH,
-        THUMB_HEIGHT,
-        Blitbuffer.COLOR_BLACK
-    )
+    if getStyle() == STYLE_CIRCLE then
+        -- Reference style: an outlined white circular thumb over a thin track.
+        -- Keep the whole circle inside the progress widget at both endpoints.
+        local diameter = math.max(2, math.min(CIRCLE_DIAMETER, width, height))
+        local radius = math.floor(diameter / 2)
+        local center_x = math.max(x + radius, math.min(x + width - radius, marker_x))
+        local circle_x = center_x - radius
+        local circle_y = center_y - radius
+        bb:paintRoundedRect(
+            circle_x, circle_y, diameter, diameter,
+            Blitbuffer.COLOR_BLACK, radius
+        )
+
+        local border = math.min(CIRCLE_BORDER, math.max(1, radius - 1))
+        local inner_diameter = diameter - 2 * border
+        if inner_diameter > 0 then
+            bb:paintRoundedRect(
+                circle_x + border,
+                circle_y + border,
+                inner_diameter,
+                inner_diameter,
+                Blitbuffer.COLOR_WHITE,
+                math.max(0, radius - border)
+            )
+        end
+    else
+        local thumb_x = marker_x - math.floor(THUMB_WIDTH / 2)
+        thumb_x = math.max(x, math.min(x + width - THUMB_WIDTH, thumb_x))
+        bb:paintRect(
+            thumb_x,
+            center_y - math.floor(THUMB_HEIGHT / 2),
+            THUMB_WIDTH,
+            THUMB_HEIGHT,
+            Blitbuffer.COLOR_BLACK
+        )
+    end
 end
 
-local function applyThinBrightnessStyle(progress)
-    if not progress or progress._mysui_thin_slider then return end
-    progress._mysui_thin_slider = true
+local function applyCustomBrightnessStyle(progress)
+    if not progress or progress._mysui_custom_slider then return end
+    progress._mysui_custom_slider = true
     progress.margin_h = 0
     progress.margin_v = 0
     progress.bordersize = 0
@@ -108,15 +139,15 @@ local function applyThinBrightnessStyle(progress)
             self.dimen.x, self.dimen.y = x, y
             self.dimen.w, self.dimen.h = width, height
         end
-        paintThinTrack(self, bb, x, y, width, height, self.percentage, false)
+        paintCustomTrack(self, bb, x, y, width, height, self.percentage, false)
     end
 end
 
-local function applyThinWarmthStyle(progress)
-    if not progress or progress._mysui_thin_slider then return end
+local function applyCustomWarmthStyle(progress)
+    if not progress or progress._mysui_custom_slider then return end
     local original_paintTo = progress.paintTo
     if type(original_paintTo) ~= "function" then return end
-    progress._mysui_thin_slider = true
+    progress._mysui_custom_slider = true
 
     progress.paintTo = function(self, bb, x, y)
         -- Preserve child layout and hit boxes, then cover the segmented visual.
@@ -126,7 +157,7 @@ local function applyThinWarmthStyle(progress)
         local button_count = tonumber(self.num_buttons) or 0
         local position = tonumber(self.position) or 0
         local percentage = button_count > 0 and position / button_count or 0
-        paintThinTrack(self, bb, x, y, width, height, percentage, true)
+        paintCustomTrack(self, bb, x, y, width, height, percentage, true)
     end
 end
 
@@ -174,6 +205,16 @@ local function makeStyleMenuItem(ctx_menu)
                     refreshQuickSettings(ctx_menu)
                 end,
             },
+            {
+                text = "圆形 / Circle",
+                radio = true,
+                checked_func = function() return getStyle() == STYLE_CIRCLE end,
+                keep_menu_open = true,
+                callback = function()
+                    SUISettings:saveSetting(STYLE_KEY, STYLE_CIRCLE)
+                    refreshQuickSettings(ctx_menu)
+                end,
+            },
         },
     }
 end
@@ -213,14 +254,14 @@ local function patchPanelBuilder()
     TouchMenu._mysui_slider_style_patched = true
 
     TouchMenu.updateItems = function(self, ...)
-        local thin_panel = getStyle() == STYLE_THIN
+        local custom_panel = getStyle() ~= STYLE_ORIGINAL
             and self.item_table
             and self.item_table._sui_qs_panel
         local warmth_widgets = {}
         local ButtonProgressWidget
         local original_bpw_init
 
-        if thin_panel and Device:hasNaturalLight() then
+        if custom_panel and Device:hasNaturalLight() then
             local ok_bpw, BPW = pcall(require, "ui/widget/buttonprogresswidget")
             if ok_bpw and BPW and type(BPW.init) == "function" then
                 ButtonProgressWidget = BPW
@@ -238,11 +279,11 @@ local function patchPanelBuilder()
         end
         if not results[1] then error(results[2]) end
 
-        if thin_panel then
+        if custom_panel then
             local refs = self._sui_qs_refs
-            if refs then applyThinBrightnessStyle(refs.fl_progress) end
+            if refs then applyCustomBrightnessStyle(refs.fl_progress) end
             for _, widget in ipairs(warmth_widgets) do
-                applyThinWarmthStyle(widget)
+                applyCustomWarmthStyle(widget)
             end
             UIManager:setDirty(self.show_parent or self, "ui")
         end
