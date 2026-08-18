@@ -213,67 +213,75 @@ local function installPluginPatch(target)
         local item = menu_items and menu_items[PLUGIN_ID]
         if not item then return unpack(results) end
 
-        -- FileBrowserPlus 1.2 keeps its settings in the long-press callback.
-        -- Capture that table and expose it in a regular submenu.
-        local settings_items = {}
-        if type(item.hold_callback) == "function" then
-            local capture = {
-                onMenuSelect = function(_, dummy_item)
-                    if dummy_item and type(dummy_item.sub_item_table) == "table" then
-                        settings_items = dummy_item.sub_item_table
-                    end
-                end,
-            }
-            local ok_capture, err = pcall(item.hold_callback, capture)
-            if not ok_capture then
-                logger.warn("filebrowserplus_qr: cannot capture settings", tostring(err))
+        -- Preserve FileBrowserPlus 1.2's top-level interaction: tap toggles
+        -- the server, hold opens settings. Only enhance those two callbacks.
+        local original_callback = item.callback
+        if type(original_callback) == "function" then
+            item.callback = function(touchmenu_instance)
+                if touchmenu_instance then
+                    return original_callback(touchmenu_instance)
+                end
+                -- Some external launchers call plugin menu callbacks without
+                -- a TouchMenu instance. Avoid FileBrowserPlus 1.2 line 521.
+                return self:onToggleFilebrowserPlusServer()
             end
         end
 
-        local sub_items = {
-            {
-                text = "FileBrowserPlus 服务器",
-                checked_func = function()
-                    local ok, running = pcall(self.isRunning, self)
-                    return ok and running == true
-                end,
-                check_callback_updates_menu = true,
-                callback = function(touchmenu_instance)
-                    local ok, running = pcall(self.isRunning, self)
-                    if ok and running then self:stop() else self:start() end
-                    if touchmenu_instance and type(touchmenu_instance.updateItems) == "function" then
-                        touchmenu_instance:updateItems()
-                    end
-                end,
-            },
-            {
-                text = "显示二维码",
-                enabled_func = function()
-                    local ok, running = pcall(self.isRunning, self)
-                    return ok and running == true
-                end,
-                callback = function() self:showQRCode() end,
-            },
-        }
-        for _, settings_item in ipairs(settings_items) do
-            sub_items[#sub_items + 1] = settings_item
-        end
-        sub_items[#sub_items + 1] = {
-            text = "启动时自动显示二维码",
-            checked_func = autoShowEnabled,
-            callback = function()
-                G_reader_settings:saveSetting(AUTO_SHOW_KEY, not autoShowEnabled())
-            end,
-        }
+        local original_hold_callback = item.hold_callback
+        if type(original_hold_callback) == "function" then
+            item.hold_callback = function(touchmenu_instance)
+                local original_settings
+                local settings_title = "FileBrowserPlus 设置"
+                local capture = {
+                    onMenuSelect = function(_, dummy_item)
+                        if dummy_item then
+                            settings_title = dummy_item.text or settings_title
+                            original_settings = dummy_item.sub_item_table
+                        end
+                    end,
+                }
+                local ok_capture, err = pcall(original_hold_callback, capture)
+                if not ok_capture or type(original_settings) ~= "table" then
+                    logger.warn("filebrowserplus_qr: cannot capture settings", tostring(err))
+                    return original_hold_callback(touchmenu_instance)
+                end
 
-        item.text = "FileBrowserPlus"
-        item.text_func = nil
-        item.checked_func = nil
-        item.callback = nil
-        item.keep_menu_open = nil
-        item.hold_callback = nil
-        item.hold_keep_menu_open = nil
-        item.sub_item_table = sub_items
+                local enhanced_settings = {
+                    {
+                        text = "显示二维码",
+                        enabled_func = function()
+                            local ok, running = pcall(self.isRunning, self)
+                            return ok and running == true
+                        end,
+                        callback = function() self:showQRCode() end,
+                    },
+                }
+                for _, settings_item in ipairs(original_settings) do
+                    enhanced_settings[#enhanced_settings + 1] = settings_item
+                end
+                enhanced_settings[#enhanced_settings + 1] = {
+                    text = "启动时自动显示二维码",
+                    checked_func = autoShowEnabled,
+                    callback = function()
+                        G_reader_settings:saveSetting(AUTO_SHOW_KEY, not autoShowEnabled())
+                    end,
+                }
+
+                local enhanced_item = {
+                    text = settings_title,
+                    sub_item_table = enhanced_settings,
+                }
+                if touchmenu_instance and type(touchmenu_instance.onMenuSelect) == "function" then
+                    return touchmenu_instance:onMenuSelect(enhanced_item)
+                end
+                local TouchMenu = require("ui/widget/touchmenu")
+                UIManager:show(TouchMenu:new{
+                    title = settings_title,
+                    item_table = enhanced_settings,
+                    parent = touchmenu_instance,
+                })
+            end
+        end
         return unpack(results)
     end
     return true
