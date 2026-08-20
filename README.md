@@ -3,7 +3,7 @@
 `Plugin_enhancements.koplugin` 是一个统一管理 KOReader 功能补丁和
 SimpleUI 扩展模块的插件。
 
-当前正式版本为 `0.8.0`，保留项目已有的全部功能，并新增
+当前正式版本为 `1.0.0`，保留项目已有的全部功能，并新增
 SimpleUI 快捷设置栏双状态图标补丁。当前版本同时适配 SimpleUI
 2.1.1 与 2.5.0。插件会自动探测旧版
 `desktop_modules/ + sui_*.lua` 和新版 `modules/ + infra/ + screens/`
@@ -46,7 +46,10 @@ SimpleUI 快捷设置栏双状态图标补丁。当前版本同时适配 SimpleU
     ├── KOReader
     │   └── 功能补丁
     │       └── 擦除渐显翻页动画
-    └── 关于
+    └── 关于与帮助
+        ├── 扩展模块说明
+        ├── 功能补丁说明
+        └── 插件信息
 ```
 
 启用扩展模块并重启后，还需要在 SimpleUI 的“排列模块”中决定是否把模块

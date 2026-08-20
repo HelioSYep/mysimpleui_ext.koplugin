@@ -15,7 +15,7 @@ local _               = require("gettext")
 local SimpleUICompat  = require("utils/simpleui_compat")
 
 local PLUGIN_ID      = "Plugin_enhancements"
-local PLUGIN_VERSION = "0.8.0"
+local PLUGIN_VERSION = "1.0.0"
 
 -- PluginLoader normally provides self.path, but keeping a source-derived
 -- fallback makes discovery reliable during early menu construction and in
@@ -601,19 +601,64 @@ function PluginEnhancements:_buildPluginMenu()
     end
 
     items[#items + 1] = {
-        text = "关于",
-        keep_menu_open = true,
-        callback = function()
-            UIManager:show(InfoMessage:new{
-                text = string.format(
-                    "插件增强 v%s\nSimpleUI：%s\n\n扩展模块：%d\n功能补丁：%d\n\n组件文件启动时加载；新发现的模块与补丁默认关闭。",
-                    PLUGIN_VERSION,
-                    self._simpleui_family or "等待初始化",
-                    #self._modules_meta,
-                    #self._patches_meta
-                ),
-            })
-        end,
+        text = "关于与帮助",
+        sub_item_table = {
+            {
+                text = "扩展模块说明",
+                keep_menu_open = true,
+                callback = function()
+                    UIManager:show(InfoMessage:new{
+                        text = [[扩展模块说明
+
+• With Pace：显示阅读速度和预计进度
+• Yanllsama Legacy：可深度定制的阅读统计面板
+• Hero：以大型卡片展示当前阅读信息
+• 阅读统计：查看年度数据和月度图表
+• 阅读连胜：统计连续阅读天数和周数
+• 最近阅读统计：展示最近书籍的进度和时间]],
+                    })
+                end,
+            },
+            {
+                text = "功能补丁说明",
+                keep_menu_open = true,
+                callback = function()
+                    UIManager:show(InfoMessage:new{
+                        text = [[功能补丁说明
+
+【SimpleUI】
+• 时钟中文日期：使用中文日期和星期格式
+• 封面轮播简介：显示当前书籍简介
+• 封面轮播排除：隐藏指定路径中的书籍
+• 模块副本：在不同页面放置相同模块
+• 双状态图标：分别显示开启和关闭图标
+• 前光灯滑块：增加三种滑块样式
+• 最近书籍增强：增加多行布局和路径排除
+• 主页屏保：将 SimpleUI 首页用作屏保
+• 阅读分析屏保：将阅读统计页面用作屏保
+
+【FileBrowserPlus】
+• 二维码增强：显示二维码并支持自动打开
+
+【KOReader】
+• 擦除渐显动画：增加擦除渐显翻页效果]],
+                    })
+                end,
+            },
+            {
+                text = "插件信息",
+                keep_menu_open = true,
+                callback = function()
+                    UIManager:show(InfoMessage:new{
+                        text = string.format(
+                            "插件增强 v%s\n\n集中管理 KOReader 功能补丁与\nSimpleUI 扩展模块。\n\n兼容 SimpleUI 2.1.1 / 2.5.0\n当前识别：%s\n\n提示：\n更改组件状态后，请完整重启 KOReader。\n\n许可：GNU AGPL v3",
+                            PLUGIN_VERSION,
+                            self._simpleui_family or "等待初始化"
+                        ),
+                    })
+                end,
+            },
+        },
     }
     return items
 end
