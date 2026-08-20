@@ -118,12 +118,12 @@ function MySimpleUIExt:_loadAndApplyPatches()
             patch.name = patch.name or displayNameFromId(patch.id)
             self._patches_meta[#self._patches_meta + 1] = patch
 
-            if states[patch.id] == nil then
+            if not patch.always_apply and states[patch.id] == nil then
                 states[patch.id] = patch.default_enabled == true
                 settings_changed = true
             end
 
-            if states[patch.id] == true then
+            if patch.always_apply or states[patch.id] == true then
                 local ok_apply, applied, reason = pcall(patch.apply)
                 if not ok_apply then
                     patch.runtime_error = tostring(applied)
@@ -201,7 +201,23 @@ function MySimpleUIExt:_buildPluginMenu()
     for _, group in ipairs(groups) do
         local patch_items = {}
         for _, patch in ipairs(group.patches) do
-            patch_items[#patch_items + 1] = self:_buildPatchItem(patch)
+            if type(patch.menu_items_func) == "function" then
+                local ok_items, custom_items = pcall(patch.menu_items_func)
+                if ok_items and type(custom_items) == "table" then
+                    for _, item in ipairs(custom_items) do
+                        patch_items[#patch_items + 1] = item
+                    end
+                else
+                    logger.warn(PLUGIN_ID .. ": failed to build menu for " .. patch.id .. ": " .. tostring(custom_items))
+                    patch_items[#patch_items + 1] = {
+                        text = patch.name,
+                        enabled = false,
+                        help_text = "菜单加载失败：" .. tostring(custom_items),
+                    }
+                end
+            else
+                patch_items[#patch_items + 1] = self:_buildPatchItem(patch)
+            end
         end
         items[#items + 1] = {
             text = group.name,
@@ -218,7 +234,7 @@ function MySimpleUIExt:_buildPluginMenu()
         keep_menu_open = true,
         callback = function()
             UIManager:show(InfoMessage:new{
-                text = "插件增强 v0.5.7\n\n"
+                text = "插件增强 v0.6.0\n\n"
                     .. "用于集中管理 KOReader 插件增强补丁。",
             })
         end,

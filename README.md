@@ -5,6 +5,31 @@
 
 ## 当前包含的补丁
 
+### `patch_swipe_animation.lua`：擦除渐显翻页动画
+
+- 默认加载动画运行时，不覆盖 KOReader 的 `frontend/ui/uimanager.lua`。
+- 支持文字排版以及 PDF、DjVu、CBZ 等固定排版文档。
+- 支持 UI / Fast 两种逐条刷新模式。
+- 横屏与竖屏可分别设置动画帧延迟。
+- 支持轻度全局刷新，减少纯文字阅读时的全屏闪烁。
+- 面向 KOReader 2026.07.1 及更新版本的 Linux 墨水屏设备；不支持 Android。
+
+动画及详细设置位于：
+
+```text
+工具
+└── 插件增强
+    └── Swipe Animation
+        ├── 擦除渐显翻页动画
+        └── 翻页动画设置
+            ├── 刷新模式
+            │   ├── UI 刷新
+            │   └── Fast 刷新
+            ├── 竖屏动画帧延迟
+            ├── 横屏动画帧延迟
+            └── 轻度全局刷新
+```
+
 ### `patch_qs_slider_style.lua`：前光灯滑块样式
 
 - 默认状态：开启。
@@ -68,7 +93,12 @@ koreader/
         ├── README.md
         └── patches/
             ├── patch_filebrowserplus_qr.lua
-            └── patch_qs_slider_style.lua
+            ├── patch_qs_slider_style.lua
+            ├── patch_swipe_animation.lua
+            └── swipe_animation/
+                ├── core.lua
+                ├── paging.lua
+                └── settings.lua
 ```
 
 插件入口位于：
@@ -117,3 +147,4 @@ return {
 
 - [doctorhetfield-cmd/simpleui.koplugin](https://github.com/doctorhetfield-cmd/simpleui.koplugin)
 - `simpleui_ext.koplugin`：本项目的补丁发现与启停菜单以其结构为参考。
+- `Swipe_Animation`：感谢原作者 `xhs:5699990012`、nuku、Echoes、`小红薯6809667F` 和 `斯普特尼克的漫游`。
