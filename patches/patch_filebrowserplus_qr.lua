@@ -18,7 +18,7 @@ local P = {
     plugin_name = "FileBrowserPlus",
     plugin_order = 20,
     description = "直接增强 FileBrowserPlus 1.2.x：在插件菜单中增加二维码显示和启动后自动显示选项。",
-    default_enabled = true,
+    default_enabled = false,
 }
 
 local function showMessage(text, timeout)
