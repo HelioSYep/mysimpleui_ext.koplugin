@@ -17,7 +17,7 @@ local P = {
     plugin_name     = "SimpleUI",
     plugin_order    = 10,
     description     = "为 SimpleUI 快捷设置栏添加“原版 / 细线 / 圆形”滑块样式选择，同步到 KOReader 原生前光灯窗口，并为亮度和色温提供跟手实时拖动。",
-    default_enabled = true,
+    default_enabled = false,
 }
 
 local STYLE_KEY      = "simpleui_qs_bar_slider_style"

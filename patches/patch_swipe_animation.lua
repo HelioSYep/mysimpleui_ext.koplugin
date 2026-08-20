@@ -9,11 +9,10 @@ local Settings = dofile(patch_dir .. "swipe_animation/settings.lua")
 local P = {
     id              = "swipe_animation",
     name            = "擦除渐显翻页动画",
-    plugin_name     = "Swipe Animation",
+    plugin_name     = "KOReader",
     plugin_order    = 30,
     description     = "为文字及 PDF、DjVu、CBZ 等固定排版文档提供擦除渐显翻页动画。",
-    default_enabled = true,
-    always_apply    = true,
+    default_enabled = false,
 }
 
 function P.apply()
@@ -30,11 +29,17 @@ function P.apply()
     end
 
     Settings.install()
+    -- The plugin-level patch toggle is the single source of truth. Once the
+    -- patch is enabled and applied, expose the animation as active.
+    G_reader_settings:saveSetting("swipe_animations", true)
     return true
 end
 
 function P.menu_items_func()
-    return Settings.buildMenuItems(P.runtime_error)
+    local items = Settings.buildMenuItems(P.runtime_error)
+    -- The first item is the legacy runtime enable switch. Activation is now
+    -- controlled by Plugin_enhancements, so only expose detailed settings.
+    return { items[2] }
 end
 
 return P
