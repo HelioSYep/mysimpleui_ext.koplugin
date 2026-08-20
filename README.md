@@ -52,7 +52,7 @@ SimpleUI → 快捷设置栏 → 滑块样式
 这是一个完整的 KOReader 插件，不是 KOReader 用户补丁。请勿放入
 `koreader/patches/`。
 
-1. 将整个项目目录命名为 `mysimpleui_ext.koplugin`。
+1. 将整个项目目录命名为 `Plugin_enhancements.koplugin`。
 2. 把该目录复制到 KOReader 的 `plugins/` 目录。
 3. 确保 SimpleUI 插件已启用，然后完全重启 KOReader。
 
@@ -61,7 +61,7 @@ SimpleUI → 快捷设置栏 → 滑块样式
 ```text
 koreader/
 └── plugins/
-    └── mysimpleui_ext.koplugin/
+    └── Plugin_enhancements.koplugin/
         ├── _meta.lua
         ├── main.lua
         ├── LICENSE
@@ -80,7 +80,7 @@ koreader/
 ## 插件内部开发约定
 
 下面提到的 `patches/` 是
-`koreader/plugins/mysimpleui_ext.koplugin/patches/`，不是 KOReader 根目录下的
+`koreader/plugins/Plugin_enhancements.koplugin/patches/`，不是 KOReader 根目录下的
 `koreader/patches/`。
 
 新的增强功能补丁放入本插件自己的 `patches/` 子目录，文件名采用：
