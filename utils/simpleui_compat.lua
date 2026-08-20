@@ -23,6 +23,7 @@ local PATHS = {
     recent         = { "modules/module_recent", "desktop_modules/module_recent" },
     book_rows      = { "modules/module_book_rows", "desktop_modules/module_book_rows" },
     quicksettings  = { "screens/sui_quicksettings_bar", "sui_quicksettings_bar" },
+    quickactions   = { "features/sui_quickactions", "sui_quickactions" },
     style          = { "features/sui_style", "sui_style" },
     streak         = { "infra/sui_streak", "sui_streak" },
     window         = { "engines/sui_window", "sui_window" },
