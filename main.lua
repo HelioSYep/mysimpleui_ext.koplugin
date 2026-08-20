@@ -15,7 +15,7 @@ local _               = require("gettext")
 local SimpleUICompat  = require("utils/simpleui_compat")
 
 local PLUGIN_ID      = "Plugin_enhancements"
-local PLUGIN_VERSION = "0.7.0"
+local PLUGIN_VERSION = "0.8.0"
 
 -- PluginLoader normally provides self.path, but keeping a source-derived
 -- fallback makes discovery reliable during early menu construction and in
@@ -42,6 +42,7 @@ local PATCH_CATALOG = {
     coverdeck_exclude = { name = "封面轮播模块：增加排除路径功能", plugin_name = "SimpleUI", plugin_order = 10 },
     module_copies = { name = "模块副本功能", plugin_name = "SimpleUI", plugin_order = 10 },
     qs_slider_style = { name = "前光灯：滑块样式", plugin_name = "SimpleUI", plugin_order = 10 },
+    qa_dual_state_icons = { name = "快捷设置栏：双状态图标（长按进入设置）", plugin_name = "SimpleUI", plugin_order = 10 },
     recent_extra = { name = "最近书籍模块：增加行数和排除路径功能", plugin_name = "SimpleUI", plugin_order = 10 },
     screensaver_homescreen = { name = "新增屏保：主页屏保", plugin_name = "SimpleUI", plugin_order = 10 },
     screensaver_insights = { name = "新增屏保：阅读分析屏保", plugin_name = "SimpleUI", plugin_order = 10 },
@@ -468,7 +469,7 @@ function PluginEnhancements:_componentToggleItem(kind, component)
         is_enabled = function() return self:_isPatchEnabled(item.id) end
     end
 
-    return {
+    local menu_item = {
         text = item.name or item.id,
         help_text = item.runtime_error
             and ((item.description or "") .. "\n\n当前加载错误：" .. item.runtime_error)
@@ -491,6 +492,20 @@ function PluginEnhancements:_componentToggleItem(kind, component)
             })
         end,
     }
+    if not is_module and type(item.hold_callback) == "function" then
+        menu_item.hold_keep_menu_open = true
+        menu_item.hold_callback = function(touchmenu_instance, source_item)
+            if not is_enabled() then
+                UIManager:show(InfoMessage:new{
+                    text = "请先启用“" .. (item.name or item.id) .. "”，然后重启 KOReader。",
+                    timeout = 3,
+                })
+                return
+            end
+            return item.hold_callback(touchmenu_instance, source_item)
+        end
+    end
+    return menu_item
 end
 
 function PluginEnhancements:_buildModuleMenu()
