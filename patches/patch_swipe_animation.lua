@@ -1,4 +1,4 @@
--- Swipe Animation integration for My SimpleUI Enhancements.
+-- Swipe Animation integration for Plugin_enhancements.
 
 local source = debug.getinfo(1, "S").source
 local patch_dir = source:match("^@(.+[\\/])[^\\/]+$")

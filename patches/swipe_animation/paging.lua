@@ -4,10 +4,10 @@ function M.install()
     local ReaderPaging = require("apps/reader/modules/readerpaging")
     local Event = require("ui/event")
 
-    if ReaderPaging._mysimpleui_swipe_animation_paging_applied then
+    if ReaderPaging._Plugin_enhancements_swipe_animation_paging_applied then
         return true
     end
-    ReaderPaging._mysimpleui_swipe_animation_paging_applied = true
+    ReaderPaging._Plugin_enhancements_swipe_animation_paging_applied = true
 
     local original_gotoPage = ReaderPaging._gotoPage
     if type(original_gotoPage) ~= "function" then
