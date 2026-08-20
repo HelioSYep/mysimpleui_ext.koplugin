@@ -15,7 +15,7 @@ local _               = require("gettext")
 local SimpleUICompat  = require("utils/simpleui_compat")
 
 local PLUGIN_ID      = "Plugin_enhancements"
-local PLUGIN_VERSION = "1.1.2-test"
+local PLUGIN_VERSION = "0.7.0"
 
 -- PluginLoader normally provides self.path, but keeping a source-derived
 -- fallback makes discovery reliable during early menu construction and in

@@ -3,7 +3,7 @@
 `Plugin_enhancements.koplugin` 是一个统一管理 KOReader 功能补丁和
 SimpleUI 扩展模块的插件。
 
-当前测试版同时适配 SimpleUI 2.1.1 与 2.5.0。插件会自动探测旧版
+当前版本同时适配 SimpleUI 2.1.1 与 2.5.0。插件会自动探测旧版
 `desktop_modules/ + sui_*.lua` 和新版 `modules/ + infra/ + screens/`
 目录结构，不需要手动选择版本。
 
