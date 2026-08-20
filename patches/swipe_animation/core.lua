@@ -20,7 +20,7 @@ function M.install()
     if not Screen then
         return false, "Device.screen is unavailable"
     end
-    if UIManager._mysimpleui_swipe_animation_core_applied then
+    if UIManager._Plugin_enhancements_swipe_animation_core_applied then
         return true
     end
     if Screen._swipe_animation_core_patch_applied then
@@ -304,7 +304,7 @@ function M.install()
 
     function Screen:afterPaint()
         self.painting = false
-        UIManager._mysimpleui_swipe_animation_suppress_refresh = false
+        UIManager._Plugin_enhancements_swipe_animation_suppress_refresh = false
         if original_afterPaint then
             return original_afterPaint(self)
         end
@@ -326,7 +326,7 @@ function M.install()
 
     local function wrapRefresh(original_refresh)
         return function(screen, ...)
-            if UIManager._mysimpleui_swipe_animation_suppress_refresh then
+            if UIManager._Plugin_enhancements_swipe_animation_suppress_refresh then
                 return
             end
 
@@ -341,7 +341,7 @@ function M.install()
                         screen.saved_bb = nil
                     end
                 elseif consumed then
-                    UIManager._mysimpleui_swipe_animation_suppress_refresh = true
+                    UIManager._Plugin_enhancements_swipe_animation_suppress_refresh = true
                     return
                 end
             end
@@ -356,7 +356,7 @@ function M.install()
         end
     end
 
-    UIManager._mysimpleui_swipe_animation_core_applied = true
+    UIManager._Plugin_enhancements_swipe_animation_core_applied = true
     return true
 end
 
