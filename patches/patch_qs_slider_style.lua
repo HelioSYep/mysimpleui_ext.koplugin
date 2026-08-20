@@ -691,10 +691,10 @@ function P.apply()
         -- The style menu is already installed. If the Quick Settings Bar is
         -- enabled later, SimpleUI asks for a restart; the panel hook will then
         -- be present on the next boot, so this is not a patch failure.
-        logger.info("mysimpleui_ext/qs_slider_style: " .. tostring(reason))
+        logger.info("Plugin_enhancements/qs_slider_style: " .. tostring(reason))
         return true
     end
-    logger.info("mysimpleui_ext/qs_slider_style: applied")
+    logger.info("Plugin_enhancements/qs_slider_style: applied")
     return true
 end
 

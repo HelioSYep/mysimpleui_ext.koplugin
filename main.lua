@@ -1,4 +1,4 @@
--- My SimpleUI Enhancements
+-- Plugin_enhancements
 --
 -- A small, extensible KOReader plugin inspired by simpleui_ext.koplugin.
 -- Enhancement patches are auto-discovered from patches/patch_*.lua.
@@ -10,7 +10,7 @@ local UIManager       = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local logger          = require("logger")
 
-local PLUGIN_ID = "mysimpleui_ext"
+local PLUGIN_ID = "Plugin_enhancements"
 
 local function settingsPath()
     return DataStorage:getSettingsDir() .. "/" .. PLUGIN_ID .. ".lua"
@@ -49,31 +49,31 @@ local function displayNameFromId(id)
     end))
 end
 
-local MySimpleUIExt = WidgetContainer:new{
+local Plugin_enhancements = WidgetContainer:new{
     name          = PLUGIN_ID,
     is_doc_only   = false,
     _settings     = nil,
     _patches_meta = {},
 }
 
-function MySimpleUIExt:_getSettings()
+function Plugin_enhancements:_getSettings()
     if not self._settings then
         self._settings = LuaSettings:open(settingsPath())
     end
     return self._settings
 end
 
-function MySimpleUIExt:_getPatchStates()
+function Plugin_enhancements:_getPatchStates()
     return self:_getSettings():readSetting("patch_states") or {}
 end
 
-function MySimpleUIExt:_isPatchEnabled(patch)
+function Plugin_enhancements:_isPatchEnabled(patch)
     local enabled = self:_getPatchStates()[patch.id]
     if enabled == nil then return patch.default_enabled == true end
     return enabled == true
 end
 
-function MySimpleUIExt:_setPatchEnabled(patch_id, enabled)
+function Plugin_enhancements:_setPatchEnabled(patch_id, enabled)
     local states = self:_getPatchStates()
     states[patch_id] = enabled == true
     local settings = self:_getSettings()
@@ -81,7 +81,7 @@ function MySimpleUIExt:_setPatchEnabled(patch_id, enabled)
     settings:flush()
 end
 
-function MySimpleUIExt:init()
+function Plugin_enhancements:init()
     self.ui.menu:registerToMainMenu(self)
 
     -- Plugins are instantiated in path order. Deferring by one UI tick makes
@@ -94,7 +94,7 @@ function MySimpleUIExt:init()
     end)
 end
 
-function MySimpleUIExt:_loadAndApplyPatches()
+function Plugin_enhancements:_loadAndApplyPatches()
     self._patches_meta = {}
     local states = self:_getPatchStates()
     local existing = {}
@@ -150,7 +150,7 @@ function MySimpleUIExt:_loadAndApplyPatches()
     end
 end
 
-function MySimpleUIExt:_buildPatchItem(patch)
+function Plugin_enhancements:_buildPatchItem(patch)
     local item_patch = patch
     return {
         text         = item_patch.name,
@@ -173,7 +173,7 @@ function MySimpleUIExt:_buildPatchItem(patch)
     }
 end
 
-function MySimpleUIExt:_buildPluginMenu()
+function Plugin_enhancements:_buildPluginMenu()
     local groups_by_name = {}
     local groups = {}
 
@@ -242,7 +242,7 @@ function MySimpleUIExt:_buildPluginMenu()
     return items
 end
 
-function MySimpleUIExt:addToMainMenu(menu_items)
+function Plugin_enhancements:addToMainMenu(menu_items)
     menu_items[PLUGIN_ID] = {
         text = "插件增强",
         sorting_hint = "tools",
@@ -250,4 +250,4 @@ function MySimpleUIExt:addToMainMenu(menu_items)
     }
 end
 
-return MySimpleUIExt
+return Plugin_enhancements
