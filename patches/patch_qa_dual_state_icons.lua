@@ -128,24 +128,140 @@ end
 
 local function frontlightState()
     local ok_power, powerd = pcall(Device.getPowerDevice, Device)
-    if not ok_power or not powerd or type(powerd.frontlightIntensity) ~= "function" then
+    if not ok_power or not powerd then
         return nil, "前光灯状态接口不可用"
     end
-    local ok, intensity = pcall(powerd.frontlightIntensity, powerd)
-    if ok and type(intensity) == "number" then return intensity > 0, "frontlightIntensity" end
+
+    if type(powerd.isFrontlightOn) == "function" then
+        local ok, enabled = pcall(powerd.isFrontlightOn, powerd)
+        if ok and type(enabled) == "boolean" then
+            return enabled, "PowerD:isFrontlightOn"
+        end
+    end
+    if type(powerd.isFrontlightOff) == "function" then
+        local ok, disabled = pcall(powerd.isFrontlightOff, powerd)
+        if ok and type(disabled) == "boolean" then
+            return not disabled, "PowerD:isFrontlightOff"
+        end
+    end
+
+    -- Compatibility fallback for older PowerD implementations. Prefer the
+    -- explicit on/off API above because some devices preserve the last
+    -- non-zero intensity while the frontlight is switched off.
+    if type(powerd.frontlightIntensity) == "function" then
+        local ok, intensity = pcall(powerd.frontlightIntensity, powerd)
+        if ok and type(intensity) == "number" then
+            return intensity > 0, "PowerD:frontlightIntensity"
+        end
+    end
     return nil, "前光灯状态接口不可用"
+end
+
+local function callBooleanMethod(object, method_name)
+    local method = object and object[method_name]
+    if type(method) ~= "function" then return nil end
+    local ok, value = pcall(method, object)
+    if ok and type(value) == "boolean" then return value end
+end
+
+local function deviceSupports(method_names)
+    if type(method_names) == "string" then method_names = { method_names } end
+    for _, method_name in ipairs(method_names or {}) do
+        if callBooleanMethod(Device, method_name) ~= true then
+            return false, "当前设备不支持此系统操作"
+        end
+    end
+    return true
+end
+
+local function onSupportedDevice(method_names, resolver)
+    return function()
+        local supported, reason = deviceSupports(method_names)
+        if not supported then return nil, reason end
+        return resolver()
+    end
+end
+
+local function readerSettingState(method_name, key, source)
+    local settings = G_reader_settings
+    local method = settings and settings[method_name]
+    if type(method) ~= "function" then
+        return nil, "系统设置状态接口不可用"
+    end
+    local ok, value = pcall(method, settings, key)
+    if ok and type(value) == "boolean" then
+        return value, source or key
+    end
+    return nil, "系统设置状态接口不可用"
+end
+
+local function touchInputState()
+    if type(UIManager._input_gestures_disabled) ~= "boolean" then
+        return nil, "触摸输入状态接口不可用"
+    end
+    return not UIManager._input_gestures_disabled, "UIManager 触摸输入状态"
+end
+
+local function rotationState()
+    local screen = Device and Device.screen
+    if not screen or type(screen.getRotationMode) ~= "function" then
+        return nil, "屏幕方向状态接口不可用"
+    end
+    local ok, mode = pcall(screen.getRotationMode, screen)
+    if ok and type(mode) == "number" then
+        -- KOReader uses even values for portrait and odd values for landscape.
+        -- The configured on icon therefore represents landscape, while the off
+        -- icon represents portrait.
+        return mode % 2 == 1, "屏幕方向（横屏/竖屏）"
+    end
+    return nil, "屏幕方向状态接口不可用"
 end
 
 local SYSTEM_STATE = {
     toggle_filebrowserplus_server = function() return pluginState("filebrowserplus") end,
-    toggle_wifi                   = wifiState,
-    toggle_frontlight             = frontlightState,
+    toggle_wifi                   = onSupportedDevice("hasWifiToggle", wifiState),
+    toggle_frontlight             = onSupportedDevice("hasFrontlight", frontlightState),
     night_mode                    = function()
-        if G_reader_settings and type(G_reader_settings.isTrue) == "function" then
-            return G_reader_settings:isTrue("night_mode"), "night_mode"
-        end
-        return nil, "夜间模式状态接口不可用"
+        return readerSettingState("isTrue", "night_mode", "夜间模式")
     end,
+    toggle_gsensor = onSupportedDevice("hasGSensor", function()
+        return readerSettingState("nilOrFalse", "input_ignore_gsensor", "重力感应")
+    end),
+    lock_gsensor = onSupportedDevice("hasGSensor", function()
+        return readerSettingState("isTrue", "input_lock_gsensor", "自动旋转锁定")
+    end),
+    toggle_hold_corners = onSupportedDevice("isTouchDevice", function()
+        return readerSettingState("nilOrFalse", "ignore_hold_corners", "角落长按")
+    end),
+    toggle_touch_input = onSupportedDevice("isTouchDevice", touchInputState),
+    swap_left_page_turn_buttons = onSupportedDevice({ "hasDPad", "useDPadAsActionKeys" }, function()
+        return readerSettingState("isTrue", "input_invert_left_page_turn_keys", "左侧翻页键反转")
+    end),
+    swap_right_page_turn_buttons = onSupportedDevice({ "hasDPad", "useDPadAsActionKeys" }, function()
+        return readerSettingState("isTrue", "input_invert_right_page_turn_keys", "右侧翻页键反转")
+    end),
+    swap_page_turn_buttons = onSupportedDevice("hasKeys", function()
+        return readerSettingState("isTrue", "input_invert_page_turn_keys", "翻页键反转")
+    end),
+    toggle_key_repeat = onSupportedDevice({ "hasKeys", "canKeyRepeat" }, function()
+        return readerSettingState("nilOrFalse", "input_no_key_repeat", "按键重复")
+    end),
+    toggle_flash_on_chapter_boundaries = onSupportedDevice("hasEinkScreen", function()
+        return readerSettingState("isTrue", "refresh_on_chapter_boundaries", "章节边界闪屏")
+    end),
+    toggle_no_flash_on_second_chapter_page = onSupportedDevice("hasEinkScreen", function()
+        return readerSettingState("nilOrFalse", "no_refresh_on_second_chapter_page", "章节第二页闪屏")
+    end),
+    toggle_flash_on_pages_with_images = onSupportedDevice("hasEinkScreen", function()
+        return readerSettingState("nilOrTrue", "refresh_on_pages_with_images", "图片页面闪屏")
+    end),
+    toggle_tap_links = onSupportedDevice("isTouchDevice", function()
+        return readerSettingState("nilOrTrue", "tap_to_follow_links", "点击链接")
+    end),
+    toggle_page_change_animation = onSupportedDevice("canDoSwipeAnimation", function()
+        return readerSettingState("isTrue", "swipe_animations", "翻页动画")
+    end),
+    toggle_rotation = rotationState,
 }
 
 local function stateForConfig(cfg)
@@ -258,7 +374,8 @@ local function installExecuteWrapper()
                 local after = stateForConfig(cfg)
                 if after ~= nil and after ~= before then refreshSimpleUISurfaces() end
             end)
-            if cfg.dispatcher_action == "toggle_wifi" then
+            if cfg.dispatcher_action == "toggle_wifi"
+                    or cfg.dispatcher_action == "toggle_frontlight" then
                 UIManager:scheduleIn(1, refreshSimpleUISurfaces)
             end
         end
