@@ -15,7 +15,7 @@ local P = {
     name            = "快捷设置栏：双状态图标（长按进入设置）",
     plugin_name     = "SimpleUI",
     plugin_order    = 10,
-    description     = "为已经绑定到 SimpleUI 的插件或系统快捷动作设置开启、关闭两张图标。已配置的有状态动作执行后保持快捷设置栏开启并实时刷新图标；只有能可靠读取状态的动作才支持双状态图标。",
+    description     = "为已经绑定到 SimpleUI 的插件或系统快捷动作设置开启、关闭两张图标。插件动作可保持快捷设置栏开启并实时刷新图标；系统操作保留 SimpleUI 原有的执行和关闭行为。只有能可靠读取状态的动作才支持双状态图标。",
     default_enabled = false,
 }
 
@@ -393,6 +393,14 @@ local function shouldKeepQuickSettingsOpen(action_id)
     local pair = configuredPair(action_id)
     if not pair then return false end
     local cfg = QA.getCustomQAConfig(action_id)
+    -- Dispatcher actions must retain SimpleUI's original callback. SimpleUI
+    -- deliberately closes the TouchMenu first and executes these actions on
+    -- the next UI tick; running them immediately while the menu is still open
+    -- can prevent device/system events from taking effect. It also overrides
+    -- SimpleUI's own decision about whether the panel should close.
+    if type(cfg) ~= "table" or not cfg.plugin_key or cfg.plugin_key == "" then
+        return false
+    end
     local state = stateForConfig(cfg)
     return state ~= nil
 end
